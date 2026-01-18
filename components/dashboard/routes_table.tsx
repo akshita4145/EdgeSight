@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card.tsx";
+import { Input } from "@/components/ui/input.tsx";
 import {
   Table,
   TableBody,
@@ -11,7 +11,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from "@/components/ui/table.tsx";
 
 const routesData = [
   {
