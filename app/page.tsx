@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { DashboardHeader } from "@/components/dashboard/header.tsx";
-import { SummaryCards } from "@/components/dashboard/summary-cards.tsx";
-import { RoutesTable } from "@/components/dashboard/routes-table.tsx";
-import { InsightsPanel } from "@/components/dashboard/insights-panel.tsx";
+import { SummaryCards } from "@/components/dashboard/summary_cards.tsx";
+import { RoutesTable } from "@/components/dashboard/routes_table.tsx";
+import { InsightsPanel } from "@/components/dashboard/insights_panel.tsx";
 
 export default function DashboardPage() {
   const [timeRange, setTimeRange] = useState("24h");
