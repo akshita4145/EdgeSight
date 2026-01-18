@@ -1,14 +1,14 @@
 "use client";
 
 import { Activity, Moon, Sun } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button.tsx";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/select.tsx";
 import { useEffect, useState } from "react";
 
 interface DashboardHeaderProps {
