@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { DashboardHeader } from "@/components/dashboard/header";
-import { SummaryCards } from "@/components/dashboard/summary-cards";
-import { RoutesTable } from "@/components/dashboard/routes-table";
-import { InsightsPanel } from "@/components/dashboard/insights-panel";
+import { DashboardHeader } from "@/components/dashboard/header.tsx";
+import { SummaryCards } from "@/components/dashboard/summary-cards.tsx";
+import { RoutesTable } from "@/components/dashboard/routes-table.tsx";
+import { InsightsPanel } from "@/components/dashboard/insights-panel.tsx";
 
 export default function DashboardPage() {
   const [timeRange, setTimeRange] = useState("24h");
