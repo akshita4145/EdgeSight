@@ -32,12 +32,26 @@ export default function DashboardPage() {
 
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function loadStats(range: string) {
+    const res = await fetch(`/api/stats?range=${encodeURIComponent(range)}`, {
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      throw new Error(`Stats API failed: ${res.status} ${res.statusText}`);
+    }
+
+    const data = (await res.json()) as StatsResponse;
+    setStats(data);
+  }
 
   useEffect(() => {
     let cancelled = false;
 
-    async function load() {
+    async function run() {
       try {
         setLoading(true);
         setError(null);
@@ -65,26 +79,65 @@ export default function DashboardPage() {
       }
     }
 
-    load();
+    run();
     return () => {
       cancelled = true;
     };
   }, [timeRange]);
+
+  async function generateTraffic() {
+    try {
+      setGenerating(true);
+      setError(null);
+
+      // 10 requests to each endpoint
+      const endpoints = ["/api/serverless", "/api/edge", "/api/cached"];
+      const requests: Promise<Response>[] = [];
+
+      for (const endpoint of endpoints) {
+        for (let i = 0; i < 10; i++) {
+          requests.push(fetch(endpoint, { method: "GET" }));
+        }
+      }
+
+      await Promise.all(requests);
+
+      // Refresh stats after generating traffic
+      await loadStats(timeRange);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Unknown error generating traffic");
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background">
       <DashboardHeader timeRange={timeRange} onTimeRangeChange={setTimeRange} />
 
       <main className="mx-auto max-w-[1600px] px-6 py-6">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="text-sm opacity-70">
+            {loading ? "Loading stats..." : stats ? `Showing: ${stats.range}` : "No stats loaded"}
+          </div>
+
+          <button
+            onClick={generateTraffic}
+            disabled={generating || loading}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {generating ? "Generating..." : "Generate Sample Traffic"}
+          </button>
+        </div>
+
         {error ? (
           <div className="mb-6 rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm">
-            <div className="font-medium">Couldn’t load stats</div>
+            <div className="font-medium">Something went wrong</div>
             <div className="mt-1 opacity-80">{error}</div>
           </div>
         ) : null}
 
-        {/* Temporary: still renders your components as-is.
-            Next step: pass stats down as props. */}
+        {/* Next step: pass real data into these components as props */}
         <SummaryCards />
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
@@ -92,10 +145,10 @@ export default function DashboardPage() {
           <InsightsPanel />
         </div>
 
-        {/* Optional debugging (remove later) */}
+        {/* Optional debug block (remove later) */}
         <div className="mt-6 text-xs opacity-70">
           <div>Loading: {String(loading)}</div>
-          <div>Range: {timeRange}</div>
+          <div>Generating: {String(generating)}</div>
           <div>Stats loaded: {String(!!stats)}</div>
         </div>
       </main>
