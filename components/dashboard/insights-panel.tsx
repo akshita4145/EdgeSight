@@ -9,42 +9,33 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-const insights = [
-  {
-    type: "warning",
-    icon: AlertTriangle,
-    title: "High latency detected",
-    description:
-      "/api/v1/analytics has P95 latency of 340ms. Consider adding caching or optimizing database queries.",
-    action: "View details",
-  },
-  {
-    type: "opportunity",
-    icon: TrendingUp,
-    title: "Traffic spike incoming",
-    description:
-      "Based on patterns, expect 40% more traffic tomorrow. Consider pre-scaling infrastructure.",
-    action: "Configure auto-scale",
-  },
-  {
-    type: "optimization",
-    icon: Zap,
-    title: "Cache optimization",
-    description:
-      "/api/v1/search could benefit from response caching. Potential 60% latency reduction.",
-    action: "Enable caching",
-  },
-  {
-    type: "security",
-    icon: Shield,
-    title: "Rate limiting recommended",
-    description:
-      "Unusual traffic patterns on /api/v1/auth/login. Consider implementing stricter rate limits.",
-    action: "Configure limits",
-  },
-];
+type InsightType = "warning" | "opportunity" | "optimization" | "security" | "default";
 
-const getTypeStyles = (type: string) => {
+function classifyInsight(text: string): InsightType {
+  const t = text.toLowerCase();
+  if (t.includes("latency") || t.includes("spike") || t.includes("slow")) return "warning";
+  if (t.includes("cache") || t.includes("caching")) return "optimization";
+  if (t.includes("rate") || t.includes("security") || t.includes("auth")) return "security";
+  if (t.includes("consider") || t.includes("could") || t.includes("opportunity")) return "opportunity";
+  return "default";
+}
+
+function iconFor(type: InsightType) {
+  switch (type) {
+    case "warning":
+      return AlertTriangle;
+    case "opportunity":
+      return TrendingUp;
+    case "optimization":
+      return Zap;
+    case "security":
+      return Shield;
+    default:
+      return Lightbulb;
+  }
+}
+
+const getTypeStyles = (type: InsightType) => {
   switch (type) {
     case "warning":
       return {
@@ -79,7 +70,15 @@ const getTypeStyles = (type: string) => {
   }
 };
 
-export function InsightsPanel() {
+export function InsightsPanel({
+  insights,
+  loading,
+}: {
+  insights: string[];
+  loading: boolean;
+}) {
+  const items = (loading ? Array.from({ length: 4 }).map(() => "…") : insights).slice(0, 6);
+
   return (
     <Card className="h-fit border-border bg-card">
       <div className="flex items-center gap-2 border-b border-border p-4">
@@ -95,38 +94,63 @@ export function InsightsPanel() {
       </div>
 
       <div className="divide-y divide-border">
-        {insights.map((insight, index) => {
-          const styles = getTypeStyles(insight.type);
-          return (
-            <div
-              key={index}
-              className="group p-4 transition-colors hover:bg-secondary/30"
-            >
-              <div className="flex items-start gap-3">
-                <div
-                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${styles.bg}`}
-                >
-                  <insight.icon className={`h-4 w-4 ${styles.icon}`} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h3 className="text-sm font-medium text-foreground">
-                    {insight.title}
-                  </h3>
-                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    {insight.description}
-                  </p>
-                  <Button
-                    variant="link"
-                    className="mt-2 h-auto p-0 text-xs text-chart-1 hover:text-chart-1/80"
+        {items.length === 0 ? (
+          <div className="p-6 text-sm text-muted-foreground">No insights yet.</div>
+        ) : (
+          items.map((text, index) => {
+            const type = text === "…" ? "default" : classifyInsight(text);
+            const Icon = iconFor(type);
+            const styles = getTypeStyles(type);
+
+            const title =
+              text === "…"
+                ? "Loading insight…"
+                : type === "warning"
+                ? "Potential issue"
+                : type === "optimization"
+                ? "Optimization"
+                : type === "security"
+                ? "Security"
+                : type === "opportunity"
+                ? "Opportunity"
+                : "Insight";
+
+            const description = text === "…" ? "—" : text;
+
+            return (
+              <div
+                key={index}
+                className="group p-4 transition-colors hover:bg-secondary/30"
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${styles.bg}`}
                   >
-                    {insight.action}
-                    <ArrowRight className="ml-1 h-3 w-3" />
-                  </Button>
+                    <Icon className={`h-4 w-4 ${styles.icon}`} />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-medium text-foreground">
+                      {title}
+                    </h3>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                      {description}
+                    </p>
+
+                    <Button
+                      variant="link"
+                      disabled={text === "…"}
+                      className="mt-2 h-auto p-0 text-xs text-chart-1 hover:text-chart-1/80 disabled:opacity-50"
+                    >
+                      View details
+                      <ArrowRight className="ml-1 h-3 w-3" />
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
 
       <div className="border-t border-border p-4">

@@ -144,7 +144,8 @@ export default function DashboardPage() {
         <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
           <RoutesTable routes={stats?.routes ?? []} loading={loading} />
 
-          <InsightsPanel />
+          <InsightsPanel insights={stats?.insights ?? []} loading={loading} />
+
         </div>
 
         {/* Optional debug block (remove later) */}
