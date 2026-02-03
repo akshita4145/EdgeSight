@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, Search } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,68 +13,56 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-const routesData = [
-  {
-    route: "/api/v1/users",
-    requests: 842500,
-    avgLatency: 32,
-    p95Latency: 89,
-    cost: 324.5,
-  },
-  {
-    route: "/api/v1/auth/login",
-    requests: 456200,
-    avgLatency: 45,
-    p95Latency: 120,
-    cost: 182.48,
-  },
-  {
-    route: "/api/v1/products",
-    requests: 389100,
-    avgLatency: 28,
-    p95Latency: 65,
-    cost: 155.64,
-  },
-  {
-    route: "/api/v1/orders",
-    requests: 234800,
-    avgLatency: 67,
-    p95Latency: 180,
-    cost: 140.88,
-  },
-  {
-    route: "/api/v1/analytics",
-    requests: 198400,
-    avgLatency: 125,
-    p95Latency: 340,
-    cost: 198.4,
-  },
-  {
-    route: "/api/v1/search",
-    requests: 156300,
-    avgLatency: 89,
-    p95Latency: 210,
-    cost: 125.04,
-  },
-  {
-    route: "/api/v1/webhooks",
-    requests: 89200,
-    avgLatency: 15,
-    p95Latency: 35,
-    cost: 35.68,
-  },
-  {
-    route: "/api/v1/notifications",
-    requests: 67500,
-    avgLatency: 22,
-    p95Latency: 55,
-    cost: 27.0,
-  },
-];
+type RouteStat = {
+  route: string;
+  runtime: string; // "edge" | "serverless"
+  requests: number;
+  avg_latency_ms: number;
+  p95_latency_ms: number;
+  est_cost_units: number;
+  cache_hit_rate: number; // 0..1
+};
 
-type SortKey = "route" | "requests" | "avgLatency" | "p95Latency" | "cost";
+type SortKey =
+  | "route"
+  | "runtime"
+  | "requests"
+  | "avg_latency_ms"
+  | "p95_latency_ms"
+  | "est_cost_units";
 
-export function RoutesTable() {
+function formatCompact(num: number) {
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
+  return num.toString();
+}
+
+function getLatencyColor(latency: number) {
+  if (latency < 50) return "text-success";
+  if (latency < 100) return "text-warning";
+  return "text-destructive";
+}
+
+function runtimeBadge(runtime: string) {
+  const isEdge = runtime === "edge";
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+        isEdge ? "bg-secondary text-foreground" : "bg-muted text-muted-foreground"
+      }`}
+    >
+      {isEdge ? "Edge" : "Serverless"}
+    </span>
+  );
+}
+
+export function RoutesTable({
+  routes,
+  loading,
+}: {
+  routes: RouteStat[];
+  loading: boolean;
+}) {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("requests");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
@@ -88,28 +76,28 @@ export function RoutesTable() {
     }
   };
 
-  const filteredAndSortedRoutes = routesData
-    .filter((route) =>
-      route.route.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-    .sort((a, b) => {
+  const filteredAndSortedRoutes = useMemo(() => {
+    const filtered = routes.filter((r) =>
+      r.route.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    const sorted = filtered.sort((a, b) => {
       const aValue = a[sortKey];
       const bValue = b[sortKey];
+
       if (typeof aValue === "string" && typeof bValue === "string") {
         return sortOrder === "asc"
           ? aValue.localeCompare(bValue)
           : bValue.localeCompare(aValue);
       }
+
       return sortOrder === "asc"
         ? (aValue as number) - (bValue as number)
         : (bValue as number) - (aValue as number);
     });
 
-  const formatNumber = (num: number) => {
-    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-    return num.toString();
-  };
+    return sorted;
+  }, [routes, searchQuery, sortKey, sortOrder]);
 
   const SortIcon = ({ column }: { column: SortKey }) => {
     if (sortKey !== column) return null;
@@ -120,25 +108,20 @@ export function RoutesTable() {
     );
   };
 
-  const getLatencyColor = (latency: number) => {
-    if (latency < 50) return "text-success";
-    if (latency < 100) return "text-warning";
-    return "text-destructive";
-  };
-
   return (
     <Card className="border-border bg-card">
       <div className="flex items-center justify-between border-b border-border p-4">
         <h2 className="text-base font-semibold text-foreground">
           Routes Overview
         </h2>
+
         <div className="relative w-64">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search routes..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 bg-secondary border-border"
+            className="bg-secondary pl-9 border-border"
           />
         </div>
       </div>
@@ -154,6 +137,15 @@ export function RoutesTable() {
                 Route
                 <SortIcon column="route" />
               </TableHead>
+
+              <TableHead
+                className="cursor-pointer text-muted-foreground hover:text-foreground"
+                onClick={() => handleSort("runtime")}
+              >
+                Runtime
+                <SortIcon column="runtime" />
+              </TableHead>
+
               <TableHead
                 className="cursor-pointer text-right text-muted-foreground hover:text-foreground"
                 onClick={() => handleSort("requests")}
@@ -161,63 +153,110 @@ export function RoutesTable() {
                 Requests
                 <SortIcon column="requests" />
               </TableHead>
+
               <TableHead
                 className="cursor-pointer text-right text-muted-foreground hover:text-foreground"
-                onClick={() => handleSort("avgLatency")}
+                onClick={() => handleSort("avg_latency_ms")}
               >
                 Avg Latency (ms)
-                <SortIcon column="avgLatency" />
+                <SortIcon column="avg_latency_ms" />
               </TableHead>
+
               <TableHead
                 className="cursor-pointer text-right text-muted-foreground hover:text-foreground"
-                onClick={() => handleSort("p95Latency")}
+                onClick={() => handleSort("p95_latency_ms")}
               >
                 P95 Latency (ms)
-                <SortIcon column="p95Latency" />
+                <SortIcon column="p95_latency_ms" />
               </TableHead>
+
               <TableHead
                 className="cursor-pointer text-right text-muted-foreground hover:text-foreground"
-                onClick={() => handleSort("cost")}
+                onClick={() => handleSort("est_cost_units")}
               >
                 Est. Cost
-                <SortIcon column="cost" />
+                <SortIcon column="est_cost_units" />
               </TableHead>
             </TableRow>
           </TableHeader>
+
           <TableBody>
-            {filteredAndSortedRoutes.map((route) => (
-              <TableRow
-                key={route.route}
-                className="border-border transition-colors hover:bg-secondary/50"
-              >
-                <TableCell className="font-mono text-sm text-foreground">
-                  {route.route}
-                </TableCell>
-                <TableCell className="text-right tabular-nums text-foreground">
-                  {formatNumber(route.requests)}
-                </TableCell>
+            {loading ? (
+              // Lightweight loading state
+              Array.from({ length: 6 }).map((_, i) => (
+                <TableRow key={i} className="border-border">
+                  <TableCell className="font-mono text-sm text-muted-foreground">
+                    —
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">—</TableCell>
+                  <TableCell className="text-right text-muted-foreground">
+                    —
+                  </TableCell>
+                  <TableCell className="text-right text-muted-foreground">
+                    —
+                  </TableCell>
+                  <TableCell className="text-right text-muted-foreground">
+                    —
+                  </TableCell>
+                  <TableCell className="text-right text-muted-foreground">
+                    —
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : filteredAndSortedRoutes.length === 0 ? (
+              <TableRow className="border-border">
                 <TableCell
-                  className={`text-right tabular-nums ${getLatencyColor(route.avgLatency)}`}
+                  colSpan={6}
+                  className="py-10 text-center text-sm text-muted-foreground"
                 >
-                  {route.avgLatency}
-                </TableCell>
-                <TableCell
-                  className={`text-right tabular-nums ${getLatencyColor(route.p95Latency)}`}
-                >
-                  {route.p95Latency}
-                </TableCell>
-                <TableCell className="text-right tabular-nums text-foreground">
-                  ${route.cost.toFixed(2)}
+                  No routes found.
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              filteredAndSortedRoutes.map((r) => (
+                <TableRow
+                  key={`${r.route}:${r.runtime}`}
+                  className="border-border transition-colors hover:bg-secondary/50"
+                >
+                  <TableCell className="font-mono text-sm text-foreground">
+                    {r.route}
+                  </TableCell>
+
+                  <TableCell>{runtimeBadge(r.runtime)}</TableCell>
+
+                  <TableCell className="text-right tabular-nums text-foreground">
+                    {formatCompact(r.requests)}
+                  </TableCell>
+
+                  <TableCell
+                    className={`text-right tabular-nums ${getLatencyColor(
+                      r.avg_latency_ms
+                    )}`}
+                  >
+                    {r.avg_latency_ms}
+                  </TableCell>
+
+                  <TableCell
+                    className={`text-right tabular-nums ${getLatencyColor(
+                      r.p95_latency_ms
+                    )}`}
+                  >
+                    {r.p95_latency_ms}
+                  </TableCell>
+
+                  <TableCell className="text-right tabular-nums text-foreground">
+                    {r.est_cost_units.toFixed(2)} units
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </div>
 
       <div className="border-t border-border p-3">
         <p className="text-xs text-muted-foreground">
-          Showing {filteredAndSortedRoutes.length} of {routesData.length} routes
+          Showing {filteredAndSortedRoutes.length} of {routes.length} routes
         </p>
       </div>
     </Card>
