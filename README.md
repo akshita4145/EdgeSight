@@ -1,36 +1,130 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# EdgeSight
 
-## Getting Started
+EdgeSight is a developer-facing dashboard that helps teams understand **cost and performance tradeoffs between Edge and Serverless runtimes on Vercel**.
 
-First, run the development server:
+Instead of just showing raw metrics, EdgeSight connects real traffic data to **actionable insights**, helping developers decide *where* Edge makes sense, *where* Serverless is sufficient, and *when* caching changes the equation.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+---
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## What EdgeSight Does
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+EdgeSight answers questions like:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Which routes are slow, and *why*?
+- Are Edge functions actually improving latency?
+- Where is caching providing real benefits?
+- Which endpoints are driving the most cost?
 
-## Learn More
+It’s designed to be **interactive and demoable**, so teams can see how architectural decisions affect performance in real time.
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## How It Works
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 1. Traffic Simulation
+The dashboard includes a **Generate Sample Traffic** button that simulates real usage by hitting:
+- Serverless endpoints
+- Edge endpoints
+- Cached endpoints
 
-## Deploy on Vercel
+Each request logs runtime, latency, and cache behavior.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 2. Data Collection
+All requests are logged into **Vercel Postgres (Neon)** with:
+- route
+- runtime (edge / serverless)
+- latency
+- cache hit/miss
+- timestamp
+
+---
+
+### 3. Aggregation & Analysis
+A single stats API (`/api/stats`) aggregates the data to compute:
+- Total requests
+- Average latency
+- P95 latency
+- Cache hit rate
+- Estimated cost units (relative comparison)
+
+Simple heuristics generate **human-readable insights**, such as:
+- “Consider Edge for this route”
+- “Low cache utilization detected”
+- “Latency spikes observed”
+
+---
+
+### 4. Dashboard UI
+The UI is built with **Next.js App Router** and components generated using **v0**, then wired to live data.
+
+Key sections:
+- **Summary Cards** — high-level metrics
+- **Routes Table** — per-route runtime, latency, and cost
+- **Insights Panel** — recommendations derived from observed behavior
+
+All UI updates automatically when new traffic is generated.
+
+---
+
+## Why EdgeSight Is Different
+
+Most dashboards show metrics.
+
+EdgeSight focuses on:
+- **Decisions**, not just data
+- **Runtime comparisons**, not isolated numbers
+- **Demo-first design**, making architectural tradeoffs easy to explain
+
+It’s closer to an internal developer tool than a generic analytics page.
+
+---
+
+## What I’d Do Next
+
+If this were extended toward production, the next steps would be:
+
+### 🔐 Authentication & Multi-Project Support
+- User auth (Vercel / GitHub OAuth)
+- Support multiple projects or environments per user
+
+### 💸 Real Billing Data
+- Replace estimated cost units with real Vercel usage APIs
+- Break down cost by function invocation, execution time, and data transfer
+
+### ⚡ Deeper Caching Analysis
+- Track cache TTL effectiveness
+- Identify routes with high recomputation cost
+- Recommend ISR, on-demand revalidation, or Edge caching strategies
+
+### 📈 Historical Trends
+- Compare time ranges (“vs last 7 days”)
+- Show regressions and improvements over time
+
+---
+
+## Tech Stack
+
+- **Next.js (App Router, TypeScript)**
+- **Vercel Edge & Serverless Functions**
+- **Vercel Postgres (Neon)**
+- **v0-generated UI (customized)**
+- **Tailwind CSS**
+
+---
+
+## Demo Tip
+
+Click **Generate Sample Traffic**, then watch how:
+- latency changes by runtime
+- cached routes improve on repeat requests
+- insights update automatically
+
+---
+
+## Summary
+
+EdgeSight demonstrates how runtime choices affect real-world performance and cost — and how tooling can guide better architectural decisions.
+
+Built as an exploration of developer experience, observability, and platform design.
