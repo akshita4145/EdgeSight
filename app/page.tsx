@@ -138,7 +138,8 @@ export default function DashboardPage() {
         ) : null}
 
         {/* Next step: pass real data into these components as props */}
-        <SummaryCards />
+        <SummaryCards totals={stats?.totals ?? null} loading={loading} />
+
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
           <RoutesTable />
