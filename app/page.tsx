@@ -1,184 +1,85 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { DashboardHeader } from "@/components/dashboard/header";
-import { SummaryCards } from "@/components/dashboard/summary-cards";
-import { RoutesTable } from "@/components/dashboard/routes-table";
-import { InsightsPanel } from "@/components/dashboard/insights-panel";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import type { RouteStat } from "@/components/ui/route-details-drawer";
 
-type Totals = {
-  total_requests: number;
-  avg_latency_ms: number;
-  cache_hit_rate: number; // 0..1
-  est_cost_units: number;
-};
-
-type RouteAgg = {
-  route: string;
-  runtime: "edge" | "serverless" | string;
-  requests: number;
-  avg_latency_ms: number;
-  p95_latency_ms: number;
-  cache_hit_rate: number; // 0..1
-  est_cost_units: number;
-};
-
-type Deltas = {
-  total_requests: number;
-  avg_latency_ms: number;
-  cache_hit_rate: number; // delta in 0..1
-  est_cost_units: number;
-};
-
-type StatsResponse = {
-  ok: boolean;
-  range: string;
-  totals: Totals;
-  deltas: Deltas;
-  routes: RouteAgg[];
-  insights: string[];
-};
-
-async function fetchStats(range: string, signal?: AbortSignal): Promise<StatsResponse> {
-  const res = await fetch(`/api/stats?range=${encodeURIComponent(range)}`, {
-    cache: "no-store",
-    signal,
-  });
-
-  if (!res.ok) {
-    throw new Error(`Stats API failed: ${res.status} ${res.statusText}`);
-  }
-
-  return (await res.json()) as StatsResponse;
+function formatCompact(num: number) {
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
+  return num.toString();
 }
 
-export default function DashboardPage() {
-  const [timeRange, setTimeRange] = useState("24h");
-  const [stats, setStats] = useState<StatsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // helps ignore stale responses if multiple fetches race
-  const loadSeq = useRef(0);
-
-  async function loadStats(range: string, opts?: { showLoading?: boolean }) {
-    const seq = ++loadSeq.current;
-    const showLoading = opts?.showLoading ?? true;
-
-    const controller = new AbortController();
-
-    try {
-      if (showLoading) setLoading(true);
-      setError(null);
-
-      const data = await fetchStats(range, controller.signal);
-
-      // ignore stale responses
-      if (seq !== loadSeq.current) return;
-
-      setStats(data);
-    } catch (e: unknown) {
-      if (seq !== loadSeq.current) return;
-
-      // AbortError is expected during rapid range switching
-      const msg =
-        e instanceof Error
-          ? e.name === "AbortError"
-            ? null
-            : e.message
-          : "Unknown error loading stats";
-
-      if (msg) {
-        setStats(null);
-        setError(msg);
-      }
-    } finally {
-      if (seq === loadSeq.current && showLoading) setLoading(false);
-    }
-
-    return () => controller.abort();
-  }
-
-  useEffect(() => {
-    // kick off load when timeRange changes
-    loadStats(timeRange);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeRange]);
-
-  async function generateTraffic() {
-    try {
-      setGenerating(true);
-      setError(null);
-
-      // More demo-realistic: mixed volumes + bursty cached route
-      const endpoints = [
-        { path: "/api/serverless", count: 14 },
-        { path: "/api/edge", count: 18 },
-        { path: "/api/cached", count: 26 }, // ensures HIT/MISS behavior shows up
-      ];
-
-      const requests: Promise<Response>[] = [];
-      for (const e of endpoints) {
-        for (let i = 0; i < e.count; i++) {
-          requests.push(fetch(e.path, { method: "GET" }));
-        }
-      }
-
-      await Promise.all(requests);
-
-      // Refresh stats after generating traffic (don’t show full loading skeleton again)
-      await loadStats(timeRange, { showLoading: false });
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Unknown error generating traffic");
-    } finally {
-      setGenerating(false);
-    }
-  }
-
+export function RoutesTable({
+  routes,
+  loading,
+  onOpenRoute,
+}: {
+  routes: RouteStat[];
+  loading: boolean;
+  onOpenRoute: (route: { route: string; runtime: string }) => void;
+}) {
   return (
-    <div className="min-h-screen bg-background">
-      <DashboardHeader timeRange={timeRange} onTimeRangeChange={setTimeRange} />
+    <Card className="p-5">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold">Routes</div>
+        <div className="text-xs text-muted-foreground">Click a row to drill in</div>
+      </div>
 
-      <main className="mx-auto max-w-[1600px] px-6 py-6">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div className="text-sm opacity-70">
-            {loading ? "Loading stats..." : stats ? `Showing: ${stats.range}` : "No stats loaded"}
+      <div className="mt-4">
+        {loading ? (
+          <div className="text-sm text-muted-foreground">Loading routes…</div>
+        ) : routes.length === 0 ? (
+          <div className="text-sm text-muted-foreground">No route stats yet — generate traffic.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Route</TableHead>
+                  <TableHead>Runtime</TableHead>
+                  <TableHead className="text-right">Requests</TableHead>
+                  <TableHead className="text-right">Avg</TableHead>
+                  <TableHead className="text-right">P95</TableHead>
+                  <TableHead className="text-right">Cost</TableHead>
+                </TableRow>
+              </TableHeader>
+
+              <TableBody>
+                {routes.map((r) => (
+                  <TableRow
+                    key={`${r.route}__${r.runtime}`}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => onOpenRoute({ route: r.route, runtime: String(r.runtime) })}
+                    title="Click to view details"
+                  >
+                    <TableCell className="font-mono text-xs">{r.route}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{String(r.runtime).toUpperCase()}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">{formatCompact(r.requests)}</TableCell>
+                    <TableCell className="text-right">{Math.round(r.avg_latency_ms)}ms</TableCell>
+                    <TableCell className="text-right">{Math.round(r.p95_latency_ms)}ms</TableCell>
+                    <TableCell className="text-right">{r.est_cost_units.toFixed(2)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+
+            <div className="mt-2 text-xs text-muted-foreground">
+              Tip: click any row to open the route details drawer.
+            </div>
           </div>
-
-          <button
-            onClick={generateTraffic}
-            disabled={generating || loading}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {generating ? "Generating..." : "Generate Sample Traffic"}
-          </button>
-        </div>
-
-        {error ? (
-          <div className="mb-6 rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm">
-            <div className="font-medium">Something went wrong</div>
-            <div className="mt-1 opacity-80">{error}</div>
-          </div>
-        ) : null}
-
-        <SummaryCards
-          totals={stats?.totals ?? null}
-          deltas={stats?.deltas ?? null}
-          loading={loading}
-        />
-
-        <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
-          <RoutesTable routes={stats?.routes ?? []} loading={loading} />
-          <InsightsPanel insights={stats?.insights ?? []} loading={loading} />
-        </div>
-
-        <div className="mt-6 text-xs opacity-70">
-          <div>Loading: {String(loading)}</div>
-          <div>Generating: {String(generating)}</div>
-          <div>Stats loaded: {String(!!stats)}</div>
-        </div>
-      </main>
-    </div>
+        )}
+      </div>
+    </Card>
   );
 }

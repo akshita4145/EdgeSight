@@ -1,26 +1,28 @@
-import {
-  Lightbulb,
-  AlertTriangle,
-  TrendingUp,
-  Zap,
-  Shield,
-  ArrowRight,
-} from "lucide-react";
+"use client";
+
+import { AlertTriangle, ArrowRight, Lightbulb, Shield, TrendingUp, Zap } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import type { RouteStat } from "@/components/ui/route-details-drawer";
 
 type InsightType = "warning" | "opportunity" | "optimization" | "security" | "default";
 
+function extractRouteHint(text: string): string | null {
+  const m = text.match(/(\/api\/[a-zA-Z0-9/_-]+)/);
+  return m?.[1] ?? null;
+}
+
 function classifyInsight(text: string): InsightType {
   const t = text.toLowerCase();
-  if (t.includes("latency") || t.includes("spike") || t.includes("slow")) return "warning";
-  if (t.includes("cache") || t.includes("caching")) return "optimization";
-  if (t.includes("rate") || t.includes("security") || t.includes("auth")) return "security";
-  if (t.includes("consider") || t.includes("could") || t.includes("opportunity")) return "opportunity";
+  if (t.includes("latency") || t.includes("slow") || t.includes("p95")) return "warning";
+  if (t.includes("cache") || t.includes("caching") || t.includes("isr")) return "optimization";
+  if (t.includes("security") || t.includes("auth") || t.includes("rate limit")) return "security";
+  if (t.includes("opportunity") || t.includes("consider") || t.includes("candidate")) return "opportunity";
   return "default";
 }
 
-function iconFor(type: InsightType) {
+function iconForInsight(type: InsightType) {
   switch (type) {
     case "warning":
       return AlertTriangle;
@@ -35,131 +37,102 @@ function iconFor(type: InsightType) {
   }
 }
 
-const getTypeStyles = (type: InsightType) => {
+function badgeForInsight(type: InsightType) {
   switch (type) {
     case "warning":
-      return {
-        bg: "bg-warning/10",
-        border: "border-warning/20",
-        icon: "text-warning",
-      };
+      return { label: "Warning", variant: "destructive" as const };
     case "opportunity":
-      return {
-        bg: "bg-chart-1/10",
-        border: "border-chart-1/20",
-        icon: "text-chart-1",
-      };
+      return { label: "Opportunity", variant: "secondary" as const };
     case "optimization":
-      return {
-        bg: "bg-success/10",
-        border: "border-success/20",
-        icon: "text-success",
-      };
+      return { label: "Optimization", variant: "outline" as const };
     case "security":
-      return {
-        bg: "bg-chart-4/10",
-        border: "border-chart-4/20",
-        icon: "text-chart-4",
-      };
+      return { label: "Security", variant: "outline" as const };
     default:
-      return {
-        bg: "bg-muted",
-        border: "border-border",
-        icon: "text-muted-foreground",
-      };
+      return { label: "Insight", variant: "outline" as const };
   }
-};
+}
 
 export function InsightsPanel({
   insights,
+  routes,
   loading,
+  onOpenRoute,
 }: {
   insights: string[];
+  routes: RouteStat[];
   loading: boolean;
+  onOpenRoute: (route: { route: string; runtime: string }) => void;
 }) {
-  const items = (loading ? Array.from({ length: 4 }).map(() => "…") : insights).slice(0, 6);
+  const worst =
+    routes.length > 0 ? [...routes].sort((a, b) => b.p95_latency_ms - a.p95_latency_ms)[0] : null;
 
   return (
-    <Card className="h-fit border-border bg-card">
-      <div className="flex items-center gap-2 border-b border-border p-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-secondary">
-          <Lightbulb className="h-4 w-4 text-muted-foreground" />
-        </div>
-        <div>
-          <h2 className="text-base font-semibold text-foreground">Insights</h2>
-          <p className="text-xs text-muted-foreground">
-            AI-powered recommendations
-          </p>
-        </div>
+    <Card className="p-5">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold">Insights</div>
+        <div className="text-xs text-muted-foreground">Actionable recommendations</div>
       </div>
 
-      <div className="divide-y divide-border">
-        {items.length === 0 ? (
-          <div className="p-6 text-sm text-muted-foreground">No insights yet.</div>
+      <div className="mt-4 space-y-3">
+        {loading ? (
+          <div className="text-sm text-muted-foreground">Loading insights…</div>
+        ) : insights.length === 0 ? (
+          <div className="text-sm text-muted-foreground">No insights yet — generate traffic.</div>
         ) : (
-          items.map((text, index) => {
-            const type = text === "…" ? "default" : classifyInsight(text);
-            const Icon = iconFor(type);
-            const styles = getTypeStyles(type);
-
-            const title =
-              text === "…"
-                ? "Loading insight…"
-                : type === "warning"
-                ? "Potential issue"
-                : type === "optimization"
-                ? "Optimization"
-                : type === "security"
-                ? "Security"
-                : type === "opportunity"
-                ? "Opportunity"
-                : "Insight";
-
-            const description = text === "…" ? "—" : text;
+          insights.map((text, idx) => {
+            const type = classifyInsight(text);
+            const Icon = iconForInsight(type);
+            const badge = badgeForInsight(type);
+            const routeHint = extractRouteHint(text);
 
             return (
-              <div
-                key={index}
-                className="group p-4 transition-colors hover:bg-secondary/30"
-              >
+              <Card key={idx} className="p-4">
                 <div className="flex items-start gap-3">
-                  <div
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${styles.bg}`}
-                  >
-                    <Icon className={`h-4 w-4 ${styles.icon}`} />
+                  <div className="mt-0.5 rounded-md border p-2">
+                    <Icon className="h-4 w-4 text-muted-foreground" />
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-sm font-medium text-foreground">
-                      {title}
-                    </h3>
-                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                      {description}
-                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <Badge variant={badge.variant}>{badge.label}</Badge>
 
-                    <Button
-                      variant="link"
-                      disabled={text === "…"}
-                      className="mt-2 h-auto p-0 text-xs text-chart-1 hover:text-chart-1/80 disabled:opacity-50"
-                    >
-                      View details
-                      <ArrowRight className="ml-1 h-3 w-3" />
-                    </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2"
+                        onClick={() => {
+                          if (routeHint) {
+                            const match =
+                              routes.find((r) => r.route === routeHint) ??
+                              routes.find((r) => r.route.includes(routeHint)) ??
+                              null;
+
+                            if (match) {
+                              onOpenRoute({ route: match.route, runtime: String(match.runtime) });
+                              return;
+                            }
+                          }
+
+                          if (worst) onOpenRoute({ route: worst.route, runtime: String(worst.runtime) });
+                        }}
+                      >
+                        View details <ArrowRight className="ml-2 h-4 w-4" />
+                      </Button>
+                    </div>
+
+                    <div className="mt-2 text-sm text-foreground">{text}</div>
+
+                    {routeHint ? (
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        Related route: <span className="font-mono">{routeHint}</span>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
-              </div>
+              </Card>
             );
           })
         )}
-      </div>
-
-      <div className="border-t border-border p-4">
-        <Button
-          variant="ghost"
-          className="w-full justify-center text-sm text-muted-foreground hover:text-foreground"
-        >
-          View all insights
-        </Button>
       </div>
     </Card>
   );
