@@ -158,6 +158,7 @@ export async function GET(req: Request) {
         curStart,
         curEnd,
         prevStart,
+        vercelBypassToken: process.env.FLOWFUND_VERCEL_BYPASS_TOKEN,
       });
 
       return NextResponse.json(data);

@@ -61,6 +61,7 @@ type WindowInput = {
 type FetchInput = WindowInput & {
   baseUrl: string;
   mode: "healthy" | "at-risk";
+  vercelBypassToken?: string;
 };
 
 type TxWithSignals = FinanceTransaction & {
@@ -197,8 +198,21 @@ export async function fetchFlowFundStats(input: FetchInput): Promise<FlowFundSta
   const url = new URL("/api/dashboard", baseUrl);
   url.searchParams.set("mode", input.mode);
 
-  const res = await fetch(url.toString(), { cache: "no-store" });
+  const headers = new Headers();
+  if (input.vercelBypassToken) {
+    headers.set("x-vercel-protection-bypass", input.vercelBypassToken);
+  }
+
+  const res = await fetch(url.toString(), {
+    cache: "no-store",
+    headers,
+  });
   if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error(
+        "FlowFund request failed (401). If using a protected Vercel deployment, set FLOWFUND_VERCEL_BYPASS_TOKEN in EdgeSight."
+      );
+    }
     throw new Error(`FlowFund request failed (${res.status})`);
   }
 
