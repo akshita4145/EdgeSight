@@ -197,10 +197,15 @@ export async function fetchFlowFundStats(input: FetchInput): Promise<FlowFundSta
   const baseUrl = normalizeBaseUrl(input.baseUrl);
   const url = new URL("/api/dashboard", baseUrl);
   url.searchParams.set("mode", input.mode);
+  if (input.vercelBypassToken) {
+    // Send as query param too because Vercel supports both, and this makes debugging easier.
+    url.searchParams.set("x-vercel-protection-bypass", input.vercelBypassToken);
+  }
 
   const headers = new Headers();
   if (input.vercelBypassToken) {
     headers.set("x-vercel-protection-bypass", input.vercelBypassToken);
+    headers.set("x-vercel-set-bypass-cookie", "true");
   }
 
   const res = await fetch(url.toString(), {
@@ -210,7 +215,7 @@ export async function fetchFlowFundStats(input: FetchInput): Promise<FlowFundSta
   if (!res.ok) {
     if (res.status === 401) {
       throw new Error(
-        "FlowFund request failed (401). If using a protected Vercel deployment, set FLOWFUND_VERCEL_BYPASS_TOKEN in EdgeSight."
+        "FlowFund request failed (401). Check that the bypass secret is from the FlowFund Vercel project (not EdgeSight), is added to EdgeSight as FLOWFUND_VERCEL_BYPASS_TOKEN for the active environment, and EdgeSight was redeployed after setting it."
       );
     }
     throw new Error(`FlowFund request failed (${res.status})`);
