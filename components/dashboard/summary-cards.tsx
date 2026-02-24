@@ -14,9 +14,16 @@ function formatCompact(n: number) {
 
 export function SummaryCards({
   totals,
+  deltas,
   loading,
 }: {
   totals: Totals | null;
+  deltas: {
+    total_requests: number;
+    avg_latency_ms: number;
+    cache_hit_rate: number;
+    est_cost_units: number;
+  } | null;
   loading: boolean;
 }) {
   const totalRequests = totals?.total_requests ?? 0;
