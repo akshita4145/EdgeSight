@@ -1,95 +1,109 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DashboardHeader } from "@/components/dashboard/header";
 import { SummaryCards } from "@/components/dashboard/summary-cards";
 import { RoutesTable } from "@/components/dashboard/routes-table";
 import { InsightsPanel } from "@/components/dashboard/insights-panel";
 
+type Totals = {
+  total_requests: number;
+  avg_latency_ms: number;
+  cache_hit_rate: number; // 0..1
+  est_cost_units: number;
+};
+
+type RouteAgg = {
+  route: string;
+  runtime: "edge" | "serverless" | string;
+  requests: number;
+  avg_latency_ms: number;
+  p95_latency_ms: number;
+  cache_hit_rate: number; // 0..1
+  est_cost_units: number;
+};
+
+type Deltas = {
+  total_requests: number;
+  avg_latency_ms: number;
+  cache_hit_rate: number; // delta in 0..1
+  est_cost_units: number;
+};
+
 type StatsResponse = {
   ok: boolean;
   range: string;
-  totals: {
-    total_requests: number;
-    avg_latency_ms: number;
-    cache_hit_rate: number; // 0..1
-    est_cost_units: number;
-  };
-  routes: Array<{
-    route: string;
-    runtime: string;
-    requests: number;
-    avg_latency_ms: number;
-    p95_latency_ms: number;
-    cache_hit_rate: number; // 0..1
-    est_cost_units: number;
-  }>;
+  totals: Totals;
+  deltas: Deltas;
+  routes: RouteAgg[];
   insights: string[];
+};
 
-  deltas: {
-  total_requests: number;
-  avg_latency_ms: number;
-  cache_hit_rate: number;
-  est_cost_units: number;
-};
-};
+async function fetchStats(range: string, signal?: AbortSignal): Promise<StatsResponse> {
+  const res = await fetch(`/api/stats?range=${encodeURIComponent(range)}`, {
+    cache: "no-store",
+    signal,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Stats API failed: ${res.status} ${res.statusText}`);
+  }
+
+  return (await res.json()) as StatsResponse;
+}
 
 export default function DashboardPage() {
   const [timeRange, setTimeRange] = useState("24h");
-
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function loadStats(range: string) {
-    const res = await fetch(`/api/stats?range=${encodeURIComponent(range)}`, {
-      cache: "no-store",
-    });
+  // helps ignore stale responses if multiple fetches race
+  const loadSeq = useRef(0);
 
-    if (!res.ok) {
-      throw new Error(`Stats API failed: ${res.status} ${res.statusText}`);
+  async function loadStats(range: string, opts?: { showLoading?: boolean }) {
+    const seq = ++loadSeq.current;
+    const showLoading = opts?.showLoading ?? true;
+
+    const controller = new AbortController();
+
+    try {
+      if (showLoading) setLoading(true);
+      setError(null);
+
+      const data = await fetchStats(range, controller.signal);
+
+      // ignore stale responses
+      if (seq !== loadSeq.current) return;
+
+      setStats(data);
+    } catch (e: unknown) {
+      if (seq !== loadSeq.current) return;
+
+      // AbortError is expected during rapid range switching
+      const msg =
+        e instanceof Error
+          ? e.name === "AbortError"
+            ? null
+            : e.message
+          : "Unknown error loading stats";
+
+      if (msg) {
+        setStats(null);
+        setError(msg);
+      }
+    } finally {
+      if (seq === loadSeq.current && showLoading) setLoading(false);
     }
 
-    const data = (await res.json()) as StatsResponse;
-    setStats(data);
+    return () => controller.abort();
   }
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function run() {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const res = await fetch(`/api/stats?range=${encodeURIComponent(timeRange)}`, {
-          cache: "no-store",
-        });
-
-        if (!res.ok) {
-          throw new Error(`Stats API failed: ${res.status} ${res.statusText}`);
-        }
-
-        const data = (await res.json()) as StatsResponse;
-
-        if (!cancelled) {
-          setStats(data);
-        }
-      } catch (e: unknown) {
-        if (!cancelled) {
-          setStats(null);
-          setError(e instanceof Error ? e.message : "Unknown error loading stats");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    run();
-    return () => {
-      cancelled = true;
-    };
+    // kick off load when timeRange changes
+    loadStats(timeRange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeRange]);
 
   async function generateTraffic() {
@@ -97,20 +111,24 @@ export default function DashboardPage() {
       setGenerating(true);
       setError(null);
 
-      // 10 requests to each endpoint
-      const endpoints = ["/api/serverless", "/api/edge", "/api/cached"];
-      const requests: Promise<Response>[] = [];
+      // More demo-realistic: mixed volumes + bursty cached route
+      const endpoints = [
+        { path: "/api/serverless", count: 14 },
+        { path: "/api/edge", count: 18 },
+        { path: "/api/cached", count: 26 }, // ensures HIT/MISS behavior shows up
+      ];
 
-      for (const endpoint of endpoints) {
-        for (let i = 0; i < 10; i++) {
-          requests.push(fetch(endpoint, { method: "GET" }));
+      const requests: Promise<Response>[] = [];
+      for (const e of endpoints) {
+        for (let i = 0; i < e.count; i++) {
+          requests.push(fetch(e.path, { method: "GET" }));
         }
       }
 
       await Promise.all(requests);
 
-      // Refresh stats after generating traffic
-      await loadStats(timeRange);
+      // Refresh stats after generating traffic (don’t show full loading skeleton again)
+      await loadStats(timeRange, { showLoading: false });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Unknown error generating traffic");
     } finally {
@@ -144,18 +162,17 @@ export default function DashboardPage() {
           </div>
         ) : null}
 
-        {/* Next step: pass real data into these components as props */}
-        <SummaryCards totals={stats?.totals ?? null} loading={loading} />
-
+        <SummaryCards
+          totals={stats?.totals ?? null}
+          deltas={stats?.deltas ?? null}
+          loading={loading}
+        />
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
           <RoutesTable routes={stats?.routes ?? []} loading={loading} />
-
           <InsightsPanel insights={stats?.insights ?? []} loading={loading} />
-
         </div>
 
-        {/* Optional debug block (remove later) */}
         <div className="mt-6 text-xs opacity-70">
           <div>Loading: {String(loading)}</div>
           <div>Generating: {String(generating)}</div>
