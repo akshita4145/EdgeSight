@@ -2,7 +2,6 @@
 
 import { Activity, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -18,6 +17,8 @@ interface DashboardHeaderProps {
 }
 
 const PRESET_RANGES = ["1h", "6h", "24h", "7d", "30d"] as const;
+const CUSTOM_HOUR_OPTIONS = ["1", "2", "3", "6", "12", "18", "24", "48"] as const;
+const CUSTOM_DAY_OPTIONS = ["1", "2", "3", "5", "7", "14", "30"] as const;
 
 type CustomUnit = "h" | "d";
 
@@ -97,23 +98,36 @@ export function DashboardHeader({
 
           {selectValue === "custom" ? (
             <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                min={1}
+              <Select
                 value={customAmount}
-                onChange={(e) => setCustomAmount(e.target.value)}
-                onBlur={applyCustomRange}
-                className="h-9 w-20 border-border bg-secondary"
-                aria-label="Custom time amount"
-              />
+                onValueChange={(value) => {
+                  setCustomAmount(value);
+                  onTimeRangeChange(`${value}${customUnit}`);
+                }}
+              >
+                <SelectTrigger className="h-9 w-[90px] border-border bg-secondary">
+                  <SelectValue aria-label="Custom time amount" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(customUnit === "h" ? CUSTOM_HOUR_OPTIONS : CUSTOM_DAY_OPTIONS).map((value) => (
+                    <SelectItem key={`${customUnit}-${value}`} value={value}>
+                      {value}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
               <Select
                 value={customUnit}
                 onValueChange={(value) => {
                   const unit = value as CustomUnit;
+                  const options = unit === "h" ? CUSTOM_HOUR_OPTIONS : CUSTOM_DAY_OPTIONS;
+                  const nextAmount = options.includes(customAmount as (typeof options)[number])
+                    ? customAmount
+                    : options[0];
                   setCustomUnit(unit);
-                  const amount = Math.max(1, Number.parseInt(customAmount || "1", 10) || 1);
-                  onTimeRangeChange(`${amount}${unit}`);
+                  setCustomAmount(nextAmount);
+                  onTimeRangeChange(`${nextAmount}${unit}`);
                 }}
               >
                 <SelectTrigger className="h-9 w-[90px] border-border bg-secondary">
