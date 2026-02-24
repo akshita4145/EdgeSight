@@ -122,7 +122,8 @@ export function DashboardHeader({
                 onValueChange={(value) => {
                   const unit = value as CustomUnit;
                   const options = unit === "h" ? CUSTOM_HOUR_OPTIONS : CUSTOM_DAY_OPTIONS;
-                  const nextAmount = options.includes(customAmount as (typeof options)[number])
+                  const optionValues: readonly string[] = options;
+                  const nextAmount = optionValues.includes(customAmount)
                     ? customAmount
                     : options[0];
                   setCustomUnit(unit);
