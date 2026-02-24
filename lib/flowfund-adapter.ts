@@ -24,6 +24,11 @@ type FlowFundDashboardSnapshot = {
   insights: FlowFundInsight[];
 };
 
+type FlowFundTransactionsResponse = {
+  mode: "healthy" | "at-risk";
+  transactions: FinanceTransaction[];
+};
+
 export type FlowFundStats = {
   ok: boolean;
   range: string;
@@ -195,11 +200,12 @@ function withSignals(transactions: FinanceTransaction[]): TxWithSignals[] {
 
 export async function fetchFlowFundStats(input: FetchInput): Promise<FlowFundStats> {
   const baseUrl = normalizeBaseUrl(input.baseUrl);
-  const url = new URL("/api/dashboard", baseUrl);
-  url.searchParams.set("mode", input.mode);
+  const txUrl = new URL("/api/transactions", baseUrl);
+  txUrl.searchParams.set("mode", input.mode);
+  txUrl.searchParams.set("_edgesight_ts", String(Date.now()));
   if (input.vercelBypassToken) {
     // Send as query param too because Vercel supports both, and this makes debugging easier.
-    url.searchParams.set("x-vercel-protection-bypass", input.vercelBypassToken);
+    txUrl.searchParams.set("x-vercel-protection-bypass", input.vercelBypassToken);
   }
 
   const headers = new Headers();
@@ -208,7 +214,7 @@ export async function fetchFlowFundStats(input: FetchInput): Promise<FlowFundSta
     headers.set("x-vercel-set-bypass-cookie", "true");
   }
 
-  const res = await fetch(url.toString(), {
+  const res = await fetch(txUrl.toString(), {
     cache: "no-store",
     headers,
   });
@@ -221,8 +227,8 @@ export async function fetchFlowFundStats(input: FetchInput): Promise<FlowFundSta
     throw new Error(`FlowFund request failed (${res.status})`);
   }
 
-  const snapshot = (await res.json()) as FlowFundDashboardSnapshot;
-  const rows = withSignals(snapshot.transactions ?? []);
+  const txPayload = (await res.json()) as FlowFundTransactionsResponse;
+  const rows = withSignals(txPayload.transactions ?? []);
 
   const current = rows.filter((row) => row.ts >= input.curStart.getTime() && row.ts < input.curEnd.getTime());
   const previous = rows.filter(
@@ -240,22 +246,44 @@ export async function fetchFlowFundStats(input: FetchInput): Promise<FlowFundSta
   };
 
   const adapterInsights = generateInsights(totals, deltas, routes);
-  const financeInsights = (snapshot.insights ?? []).map((insight) => {
-    const recommendation = insight.recommendation ? ` ${insight.recommendation}` : "";
-    return `${insight.title}: ${insight.message}${recommendation}`;
-  });
+  let financeInsights: string[] = [];
+  let generatedAtText = `${new Date().toISOString()} (UTC)`;
+
+  try {
+    const dashboardUrl = new URL("/api/dashboard", baseUrl);
+    dashboardUrl.searchParams.set("mode", input.mode);
+    dashboardUrl.searchParams.set("_edgesight_ts", String(Date.now()));
+    if (input.vercelBypassToken) {
+      dashboardUrl.searchParams.set("x-vercel-protection-bypass", input.vercelBypassToken);
+    }
+
+    const dashboardRes = await fetch(dashboardUrl.toString(), {
+      cache: "no-store",
+      headers,
+    });
+
+    if (dashboardRes.ok) {
+      const snapshot = (await dashboardRes.json()) as FlowFundDashboardSnapshot;
+      financeInsights = (snapshot.insights ?? []).map((insight) => {
+        const recommendation = insight.recommendation ? ` ${insight.recommendation}` : "";
+        return `${insight.title}: ${insight.message}${recommendation}`;
+      });
+
+      const generatedAt = snapshot.generatedAt ? new Date(snapshot.generatedAt) : null;
+      generatedAtText =
+        generatedAt && !Number.isNaN(generatedAt.getTime())
+          ? `${generatedAt.toISOString()} (UTC)`
+          : generatedAtText;
+    }
+  } catch {
+    // Keep metrics live even if the secondary dashboard snapshot call fails.
+  }
   const granularityHint =
     routes.length <= 1 && (input.range === "1h" || input.range === "6h" || input.range === "24h")
       ? [
           "FlowFund records are currently date-based (not timestamped to the minute), so short windows like 24h may only show one transaction category. Use 7d or 30d for a fuller breakdown."
         ]
       : [];
-
-  const generatedAt = snapshot.generatedAt ? new Date(snapshot.generatedAt) : null;
-  const generatedAtText =
-    generatedAt && !Number.isNaN(generatedAt.getTime())
-      ? `${generatedAt.toISOString()} (UTC)`
-      : "unknown time";
 
   return {
     ok: true,
@@ -264,7 +292,7 @@ export async function fetchFlowFundStats(input: FetchInput): Promise<FlowFundSta
     deltas,
     routes,
     insights: [
-      `FlowFund live mode (${snapshot.mode}) connected. Snapshot generated at ${generatedAtText}.`,
+      `FlowFund live mode (${txPayload.mode}) connected. Snapshot generated at ${generatedAtText}.`,
       ...granularityHint,
       ...financeInsights,
       ...adapterInsights,
