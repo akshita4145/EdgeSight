@@ -31,70 +31,85 @@ export function generateInsights(
   routes: RouteAgg[]
 ): string[] {
   const out: string[] = [];
+  const previousRequests = Math.max(0, totals.total_requests - deltas.total_requests);
+  const hasMeaningfulVolume = totals.total_requests >= 20 && previousRequests >= 20;
+  const formatPct = (value: number) => `${Math.round(value * 100)}%`;
 
   // 1) Global regressions / improvements
-  if (deltas.avg_latency_ms > 15) {
+  if (
+    hasMeaningfulVolume &&
+    deltas.avg_latency_ms > 10 &&
+    deltas.avg_latency_ms / Math.max(1, totals.avg_latency_ms - deltas.avg_latency_ms) >= 0.1
+  ) {
     out.push(
       `Latency regression: avg latency increased by ${deltas.avg_latency_ms}ms vs previous period. Check top routes by P95 for hotspots.`
     );
-  } else if (deltas.avg_latency_ms < -15) {
+  } else if (
+    hasMeaningfulVolume &&
+    deltas.avg_latency_ms < -10 &&
+    Math.abs(deltas.avg_latency_ms) / Math.max(1, totals.avg_latency_ms - deltas.avg_latency_ms) >= 0.1
+  ) {
     out.push(
       `Latency improved: avg latency dropped by ${Math.abs(deltas.avg_latency_ms)}ms vs previous period. Consider locking in recent optimizations with monitoring.`
     );
   }
 
-  if (deltas.total_requests > 0) {
-    const pct = totals.total_requests
-      ? Math.round((deltas.total_requests / Math.max(1, totals.total_requests - deltas.total_requests)) * 100)
-      : 0;
-    if (pct >= 30) {
+  if (deltas.total_requests > 0 && previousRequests >= 20) {
+    const pct = (deltas.total_requests / previousRequests) * 100;
+    if (pct >= 20 && pct <= 300) {
       out.push(
-        `Traffic spike: requests are up ~${pct}% vs previous period. Consider pre-scaling or reviewing rate limits.`
+        `Traffic increase: requests rose from ${previousRequests} to ${totals.total_requests} (${Math.round(
+          pct
+        )}% vs previous period). Consider pre-scaling or reviewing rate limits.`
       );
     }
+  } else if (deltas.total_requests >= 25 && totals.total_requests >= 30) {
+    out.push(
+      `Traffic increase: ${deltas.total_requests} more requests than the previous period. Watch concurrency and downstream limits if this trend continues.`
+    );
   }
 
   // 2) Route-level: worst P95
   const byP95 = [...routes].sort((a, b) => b.p95_latency_ms - a.p95_latency_ms);
   const worst = byP95[0];
-  if (worst && worst.p95_latency_ms >= 200) {
+  if (worst && worst.requests >= 10 && worst.p95_latency_ms >= 180) {
     out.push(
-      `${worst.route} has high tail latency (P95 ${worst.p95_latency_ms}ms). Consider caching, query optimization, or moving computation off the request path.`
+      `${worst.route} shows elevated tail latency (P95 ${worst.p95_latency_ms}ms across ${worst.requests} requests). Consider caching, query optimization, or moving computation off the request path.`
     );
   }
 
   // 3) Cache opportunities: high traffic + low cache hit rate
   const cacheOpp = routes
-    .filter((r) => r.requests >= 50 && r.cache_hit_rate < 0.25)
+    .filter((r) => r.requests >= 20 && r.cache_hit_rate < 0.4)
     .sort((a, b) => b.requests - a.requests)[0];
 
   if (cacheOpp) {
     out.push(
-      `Cache opportunity: ${cacheOpp.route} has ${cacheOpp.requests} requests but only ${Math.round(
-        cacheOpp.cache_hit_rate * 100
-      )}% cache hit rate. Add ISR, Edge caching, or memoize expensive lookups.`
+      `Cache opportunity: ${cacheOpp.route} handled ${cacheOpp.requests} requests with a ${formatPct(
+        cacheOpp.cache_hit_rate
+      )} cache hit rate. Add ISR, edge caching, or memoize expensive lookups.`
     );
   }
 
   // 4) “Edge candidate”: serverless route with low compute and lots of traffic
   const edgeCandidate = routes
-    .filter((r) => r.runtime === "serverless" && r.requests >= 80 && r.avg_latency_ms <= 120)
+    .filter((r) => r.runtime === "serverless" && r.requests >= 30 && r.avg_latency_ms <= 120)
     .sort((a, b) => b.requests - a.requests)[0];
 
   if (edgeCandidate) {
     out.push(
-      `Edge candidate: ${edgeCandidate.route} is serverless with solid avg latency (${edgeCandidate.avg_latency_ms}ms) and high traffic. Consider moving to Edge for lower tail latency and global performance.`
+      `Edge candidate: ${edgeCandidate.route} is serverless with ${edgeCandidate.requests} requests and ${edgeCandidate.avg_latency_ms}ms average latency. Consider moving it to Edge for lower tail latency and better global performance.`
     );
   }
 
   // 5) Cost risk: route contributing a lot of cost units
   const totalCost = Math.max(1, totals.est_cost_units);
   const costTop = [...routes].sort((a, b) => b.est_cost_units - a.est_cost_units)[0];
-  if (costTop && costTop.est_cost_units / totalCost >= 0.35) {
+  if (costTop && totals.est_cost_units >= 25 && costTop.requests >= 10 && costTop.est_cost_units / totalCost >= 0.35) {
     out.push(
-      `Cost concentration: ${costTop.route} accounts for ~${Math.round(
+      `Cost concentration: ${costTop.route} accounts for ${Math.round(
         (costTop.est_cost_units / totalCost) * 100
-      )}% of estimated cost units. Investigate payload size, cold starts, or redundant calls.`
+      )}% of the estimated cost score in this window. Investigate payload size, cold starts, or redundant calls.`
     );
   }
 
