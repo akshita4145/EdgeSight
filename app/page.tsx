@@ -25,6 +25,13 @@ type StatsResponse = {
     est_cost_units: number;
   }>;
   insights: string[];
+
+  deltas: {
+  total_requests: number;
+  avg_latency_ms: number;
+  cache_hit_rate: number;
+  est_cost_units: number;
+};
 };
 
 export default function DashboardPage() {
