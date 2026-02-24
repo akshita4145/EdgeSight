@@ -27,7 +27,7 @@ function formatSigned(n: number, opts?: { decimals?: number; suffix?: string }) 
 }
 
 function pillStyles(tone: "good" | "bad" | "neutral") {
-  // Keeping it subtle and consistent with your current design system
+  //keep pill colors subtle and consistent with the current theme.
   if (tone === "neutral") return "bg-muted text-muted-foreground";
   if (tone === "good") return "bg-secondary text-foreground";
   return "bg-destructive/10 text-destructive";
@@ -47,11 +47,11 @@ export function SummaryCards({
   const cacheHitPct = totals ? Math.round(totals.cache_hit_rate * 1000) / 10 : 0; // one decimal
   const estCost = totals?.est_cost_units ?? 0;
 
-  // Pre-format pills per card (using deltas)
+  //precompute delta values once so each card only handles display logic.
   const requestDelta = deltas?.total_requests ?? 0;
   const latencyDelta = deltas?.avg_latency_ms ?? 0;
   const costDelta = deltas?.est_cost_units ?? 0;
-  const cacheDeltaPct = deltas ? Math.round(deltas.cache_hit_rate * 1000) / 10 : 0; // delta in percent points
+  const cacheDeltaPct = deltas ? Math.round(deltas.cache_hit_rate * 1000) / 10 : 0; //delta in percent points
 
   const cards = [
     {
@@ -74,7 +74,7 @@ export function SummaryCards({
       description: "overall",
       pill: () => {
         if (loading || !deltas) return { text: "—", tone: "neutral" as const };
-        // Higher latency is worse
+        //higher latency is worse.
         const tone =
           latencyDelta === 0 ? "neutral" : latencyDelta < 0 ? "good" : "bad";
         return { text: formatSigned(latencyDelta, { decimals: 0, suffix: "ms" }), tone } as const;
@@ -88,7 +88,7 @@ export function SummaryCards({
       description: "relative estimate",
       pill: () => {
         if (loading || !deltas) return { text: "—", tone: "neutral" as const };
-        // Higher cost is worse
+        //higher cost is worse.
         const tone = costDelta === 0 ? "neutral" : costDelta < 0 ? "good" : "bad";
         return { text: formatSigned(costDelta, { decimals: 2 }), tone } as const;
       },
@@ -101,7 +101,7 @@ export function SummaryCards({
       description: "cache hits / total",
       pill: () => {
         if (loading || !deltas) return { text: "—", tone: "neutral" as const };
-        // Higher cache hit rate is better
+        //higher cache hit rate is better.
         const tone =
           cacheDeltaPct === 0 ? "neutral" : cacheDeltaPct > 0 ? "good" : "bad";
         return { text: formatSigned(cacheDeltaPct, { decimals: 1, suffix: "%" }), tone } as const;

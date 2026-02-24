@@ -54,6 +54,7 @@ export function RoutesTable({
               </TableHeader>
 
               <TableBody>
+                {/*use route+runtime to preserve uniqueness across deployment targets.*/}
                 {routes.map((r) => (
                   <TableRow
                     key={`${r.route}__${r.runtime}`}

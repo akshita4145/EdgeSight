@@ -52,6 +52,7 @@ export default function HomePage() {
     let cancelled = false;
 
     async function loadStats() {
+      //refetch whenever the range changes or we manually trigger a refresh.
       setLoading(true);
       try {
         const res = await fetch(`/api/stats?range=${encodeURIComponent(timeRange)}`, {
@@ -63,6 +64,7 @@ export default function HomePage() {
         }
 
         const data = (await res.json()) as StatsResponse;
+        //ignore late responses after unmount or dependency changes.
         if (cancelled) return;
 
         setTotals(data.totals);
@@ -71,6 +73,7 @@ export default function HomePage() {
         setInsights(data.insights ?? []);
       } catch {
         if (cancelled) return;
+        //show a safe empty state while keeping the page interactive.
         setTotals(null);
         setDeltas(null);
         setRoutes([]);
@@ -88,6 +91,7 @@ export default function HomePage() {
   }, [timeRange, refreshTick]);
 
   function handleOpenRoute(target: { route: string; runtime: string }) {
+    //prefer an exact route+runtime match, then fall back to route-only.
     const match =
       routes.find((r) => r.route === target.route && String(r.runtime) === target.runtime) ??
       routes.find((r) => r.route === target.route) ??
@@ -98,6 +102,7 @@ export default function HomePage() {
   }
 
   async function hitEndpoint(path: string, count: number) {
+    //fire a small burst in parallel so demo data appears quickly.
     const requests = Array.from({ length: count }, () =>
       fetch(path, { method: "GET", cache: "no-store" })
     );
@@ -114,12 +119,14 @@ export default function HomePage() {
         throw new Error(`DB init failed (${initRes.status})`);
       }
 
+      //mix runtimes and cached/non-cached traffic so insights have variety.
       await hitEndpoint("/api/edge", 12);
       await hitEndpoint("/api/serverless", 12);
       await hitEndpoint("/api/cached", 12);
       await hitEndpoint("/api/cached", 12);
 
       setDemoMessage("Demo traffic generated. Refreshing dashboard...");
+      //bump a counter to reuse the existing stats effect.
       setRefreshTick((n) => n + 1);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";

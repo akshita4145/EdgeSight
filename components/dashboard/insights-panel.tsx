@@ -9,11 +9,13 @@ import type { RouteStat } from "@/components/ui/route-details-drawer";
 type InsightType = "warning" | "opportunity" | "optimization" | "security" | "default";
 
 function extractRouteHint(text: string): string | null {
+  //pull a route path from generated insight text when present.
   const m = text.match(/(\/api\/[a-zA-Z0-9/_-]+)/);
   return m?.[1] ?? null;
 }
 
 function classifyInsight(text: string): InsightType {
+  //use keyword heuristics so generated strings get a stable visual style.
   const t = text.toLowerCase();
   if (t.includes("latency") || t.includes("slow") || t.includes("p95")) return "warning";
   if (t.includes("cache") || t.includes("caching") || t.includes("isr")) return "optimization";
@@ -63,6 +65,7 @@ export function InsightsPanel({
   loading: boolean;
   onOpenRoute: (route: { route: string; runtime: string }) => void;
 }) {
+  //fallback target when an insight does not mention a specific route.
   const worst =
     routes.length > 0 ? [...routes].sort((a, b) => b.p95_latency_ms - a.p95_latency_ms)[0] : null;
 
@@ -102,6 +105,7 @@ export function InsightsPanel({
                         className="h-8 px-2"
                         onClick={() => {
                           if (routeHint) {
+                            //try exact route first, then partial match if wording differs.
                             const match =
                               routes.find((r) => r.route === routeHint) ??
                               routes.find((r) => r.route.includes(routeHint)) ??
@@ -113,6 +117,7 @@ export function InsightsPanel({
                             }
                           }
 
+                          //if no route is hinted, send users to the worst p95 route.
                           if (worst) onOpenRoute({ route: worst.route, runtime: String(worst.runtime) });
                         }}
                       >

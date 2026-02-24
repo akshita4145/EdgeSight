@@ -32,17 +32,20 @@ type RouteAgg = {
 
 function p95(values: number[]) {
   if (values.length === 0) return 0;
+  //sort a copy so we do not mutate the original latency list.
   const sorted = [...values].sort((a, b) => a - b);
   const idx = Math.floor(0.95 * (sorted.length - 1));
   return sorted[idx];
 }
 
 function estimateCostUnits(runtime: string, latencyMs: number) {
+  //keep cost directional for comparisons, not billing-accurate.
   const runtimeBase = runtime === "edge" ? 0.8 : 1.2;
   return runtimeBase + latencyMs / 200;
 }
 
 function summarizeLogs(rows: DbLogRow[]): Totals {
+  //derive dashboard cards from raw rows in the selected window.
   const total_requests = rows.length;
   const avg_latency_ms = total_requests
     ? Math.round(rows.reduce((sum, r) => sum + Number(r.latency_ms), 0) / total_requests)
@@ -62,6 +65,7 @@ function aggregateRoutes(rows: DbLogRow[]): RouteAgg[] {
   const byRoute = new Map<string, DbLogRow[]>();
 
   for (const row of rows) {
+    //group by route+runtime so the same path can appear in both runtimes.
     const key = `${row.route}__${row.runtime}`;
     const group = byRoute.get(key) ?? [];
     group.push(row);
@@ -109,6 +113,7 @@ export async function GET(req: Request) {
 
   let rows: DbLogRow[] = [];
   try {
+    //load both current and previous windows in one query for delta calculations.
     const result = await sql<DbLogRow>`
       SELECT route, runtime, latency_ms, cache_hit, created_at
       FROM request_logs
@@ -143,6 +148,7 @@ export async function GET(req: Request) {
     );
   }
 
+  //split rows into current and previous windows using the selected range size.
   const current = rows.filter((r) => new Date(r.created_at).getTime() >= curStart.getTime());
   const previous = rows.filter((r) => {
     const ts = new Date(r.created_at).getTime();
@@ -153,6 +159,7 @@ export async function GET(req: Request) {
   const prevTotals = summarizeLogs(previous);
   const routes = aggregateRoutes(current);
   const deltas = {
+    //deltas drive the change pills in the summary cards.
     total_requests: totals.total_requests - prevTotals.total_requests,
     avg_latency_ms: totals.avg_latency_ms - prevTotals.avg_latency_ms,
     cache_hit_rate: totals.cache_hit_rate - prevTotals.cache_hit_rate,
