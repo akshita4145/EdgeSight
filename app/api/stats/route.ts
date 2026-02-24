@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "@vercel/postgres";
 import { generateInsights } from "@/lib/insights";
+import { fetchFlowFundStats } from "@/lib/flowfund-adapter";
 import { parseRangeToMs, type Runtime } from "@/lib/telemetry";
 
 export const runtime = "nodejs";
@@ -107,6 +108,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const now = Date.now();
   const rangeParam = url.searchParams.get("range") ?? "24h";
+  const source = url.searchParams.get("source") ?? "edgesight";
   const startParam = url.searchParams.get("start");
   const endParam = url.searchParams.get("end");
 
@@ -138,6 +140,55 @@ export async function GET(req: Request) {
     curEnd = new Date(now);
     curStart = new Date(now - windowMs);
     prevStart = new Date(now - 2 * windowMs);
+  }
+
+  if (source === "flowfund") {
+    const flowfundMode =
+      url.searchParams.get("flowfundMode") === "at-risk" ? "at-risk" : "healthy";
+    const flowfundBaseUrl =
+      url.searchParams.get("flowfundBaseUrl") ||
+      process.env.FLOWFUND_BASE_URL ||
+      "http://localhost:3001";
+
+    try {
+      const data = await fetchFlowFundStats({
+        baseUrl: flowfundBaseUrl,
+        mode: flowfundMode,
+        range,
+        curStart,
+        curEnd,
+        prevStart,
+      });
+
+      return NextResponse.json(data);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to fetch FlowFund dashboard";
+
+      return NextResponse.json(
+        {
+          ok: false,
+          range,
+          totals: {
+            total_requests: 0,
+            avg_latency_ms: 0,
+            cache_hit_rate: 0,
+            est_cost_units: 0,
+          },
+          deltas: {
+            total_requests: 0,
+            avg_latency_ms: 0,
+            cache_hit_rate: 0,
+            est_cost_units: 0,
+          },
+          routes: [],
+          insights: [
+            `FlowFund connection failed: ${message}. Start flowfund-cashflow (for example on http://localhost:3001) and retry.`,
+          ],
+        },
+        { status: 200 }
+      );
+    }
   }
 
   let rows: DbLogRow[] = [];

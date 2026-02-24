@@ -7,6 +7,14 @@ import { RoutesTable } from "@/components/dashboard/routes-table";
 import { InsightsPanel } from "@/components/dashboard/insights-panel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   RouteDetailsDrawer,
   type RouteStat,
@@ -35,6 +43,8 @@ type StatsResponse = {
   insights: string[];
 };
 
+type DataSource = "edgesight" | "flowfund";
+
 function formatForDateTimeLocal(date: Date) {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
@@ -50,6 +60,9 @@ function parseLocalDateTimeToIso(value: string) {
 }
 
 export default function HomePage() {
+  const [dataSource, setDataSource] = useState<DataSource>("edgesight");
+  const [flowfundBaseUrl, setFlowfundBaseUrl] = useState("http://localhost:3001");
+  const [flowfundMode, setFlowfundMode] = useState<"healthy" | "at-risk">("healthy");
   const [timeRange, setTimeRange] = useState("24h");
   const [customStart, setCustomStart] = useState(() =>
     formatForDateTimeLocal(new Date(Date.now() - 24 * 60 * 60 * 1000))
@@ -67,6 +80,16 @@ export default function HomePage() {
   const [selectedRoute, setSelectedRoute] = useState<RouteStat | null>(null);
 
   useEffect(() => {
+    if (dataSource !== "flowfund") return;
+
+    const interval = window.setInterval(() => {
+      setRefreshTick((n) => n + 1);
+    }, 5000);
+
+    return () => window.clearInterval(interval);
+  }, [dataSource]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function loadStats() {
@@ -75,6 +98,11 @@ export default function HomePage() {
       try {
         const params = new URLSearchParams();
         params.set("range", timeRange);
+        params.set("source", dataSource);
+        if (dataSource === "flowfund") {
+          params.set("flowfundMode", flowfundMode);
+          params.set("flowfundBaseUrl", flowfundBaseUrl);
+        }
         if (timeRange === "custom") {
           const startIso = parseLocalDateTimeToIso(customStart);
           const endIso = parseLocalDateTimeToIso(customEnd);
@@ -115,7 +143,7 @@ export default function HomePage() {
     return () => {
       cancelled = true;
     };
-  }, [timeRange, customStart, customEnd, refreshTick]);
+  }, [timeRange, customStart, customEnd, refreshTick, dataSource, flowfundMode, flowfundBaseUrl]);
 
   function handleOpenRoute(target: { route: string; runtime: string }) {
     //prefer an exact route+runtime match, then fall back to route-only.
@@ -175,22 +203,93 @@ export default function HomePage() {
       />
 
       <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-6 py-6">
-        <Card className="flex flex-col gap-3 border-border/80 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="text-sm font-semibold">Demo Data Generator</div>
-            <div className="text-xs text-muted-foreground">
-              Initializes the DB table and sends sample requests to demo endpoints.
+        <Card className="flex flex-col gap-4 border-border/80 p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-sm font-semibold">Data Source</div>
+              <div className="text-xs text-muted-foreground">
+                Switch between EdgeSight demo telemetry and a live FlowFund connection.
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Select
+                value={dataSource}
+                onValueChange={(value) => setDataSource(value as DataSource)}
+              >
+                <SelectTrigger className="w-[220px] border-border bg-secondary">
+                  <SelectValue placeholder="Select data source" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="edgesight">EdgeSight Demo</SelectItem>
+                  <SelectItem value="flowfund">FlowFund Live</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Button variant="outline" onClick={() => setRefreshTick((n) => n + 1)}>
+                Refresh now
+              </Button>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            {demoMessage ? (
-              <div className="max-w-[320px] text-xs text-muted-foreground">{demoMessage}</div>
-            ) : null}
-            <Button onClick={handleGenerateDemoTraffic} disabled={demoLoading}>
-              {demoLoading ? "Generating..." : "Generate Demo Traffic"}
-            </Button>
-          </div>
+          {dataSource === "edgesight" ? (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-sm font-semibold">Demo Data Generator</div>
+                <div className="text-xs text-muted-foreground">
+                  Initializes the DB table and sends sample requests to demo endpoints.
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {demoMessage ? (
+                  <div className="max-w-[320px] text-xs text-muted-foreground">{demoMessage}</div>
+                ) : null}
+                <Button onClick={handleGenerateDemoTraffic} disabled={demoLoading}>
+                  {demoLoading ? "Generating..." : "Generate Demo Traffic"}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-[1.2fr_180px_160px_auto] md:items-end">
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground" htmlFor="flowfund-url">
+                  FlowFund Base URL
+                </label>
+                <Input
+                  id="flowfund-url"
+                  value={flowfundBaseUrl}
+                  onChange={(e) => setFlowfundBaseUrl(e.target.value)}
+                  placeholder="http://localhost:3001"
+                  className="border-border bg-secondary"
+                />
+              </div>
+
+              <div>
+                <div className="mb-1 text-xs text-muted-foreground">FlowFund Mode</div>
+                <Select
+                  value={flowfundMode}
+                  onValueChange={(value) => setFlowfundMode(value as "healthy" | "at-risk")}
+                >
+                  <SelectTrigger className="w-full border-border bg-secondary">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="healthy">healthy</SelectItem>
+                    <SelectItem value="at-risk">at-risk</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="text-xs text-muted-foreground">
+                Auto-refresh every 5s while in FlowFund Live mode.
+              </div>
+
+              <Button variant="secondary" onClick={() => setRefreshTick((n) => n + 1)}>
+                Reconnect
+              </Button>
+            </div>
+          )}
         </Card>
 
         <SummaryCards totals={totals} deltas={deltas} loading={loading} />
