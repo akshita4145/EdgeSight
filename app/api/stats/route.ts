@@ -105,11 +105,40 @@ function aggregateRoutes(rows: DbLogRow[]): RouteAgg[] {
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  const range = url.searchParams.get("range") ?? "24h";
-  const windowMs = parseRangeToMs(range);
   const now = Date.now();
-  const curStart = new Date(now - windowMs);
-  const prevStart = new Date(now - 2 * windowMs);
+  const rangeParam = url.searchParams.get("range") ?? "24h";
+  const startParam = url.searchParams.get("start");
+  const endParam = url.searchParams.get("end");
+
+  let range = rangeParam;
+  let curStart: Date;
+  let curEnd: Date;
+  let prevStart: Date;
+
+  if (rangeParam === "custom" && startParam && endParam) {
+    const parsedStart = new Date(startParam);
+    const parsedEnd = new Date(endParam);
+    const startMs = parsedStart.getTime();
+    const endMs = parsedEnd.getTime();
+
+    if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && endMs > startMs) {
+      const windowMs = endMs - startMs;
+      curStart = parsedStart;
+      curEnd = parsedEnd;
+      prevStart = new Date(startMs - windowMs);
+    } else {
+      range = "24h";
+      const windowMs = parseRangeToMs(range);
+      curEnd = new Date(now);
+      curStart = new Date(now - windowMs);
+      prevStart = new Date(now - 2 * windowMs);
+    }
+  } else {
+    const windowMs = parseRangeToMs(range);
+    curEnd = new Date(now);
+    curStart = new Date(now - windowMs);
+    prevStart = new Date(now - 2 * windowMs);
+  }
 
   let rows: DbLogRow[] = [];
   try {
@@ -149,7 +178,10 @@ export async function GET(req: Request) {
   }
 
   //split rows into current and previous windows using the selected range size.
-  const current = rows.filter((r) => new Date(r.created_at).getTime() >= curStart.getTime());
+  const current = rows.filter((r) => {
+    const ts = new Date(r.created_at).getTime();
+    return ts >= curStart.getTime() && ts < curEnd.getTime();
+  });
   const previous = rows.filter((r) => {
     const ts = new Date(r.created_at).getTime();
     return ts >= prevStart.getTime() && ts < curStart.getTime();

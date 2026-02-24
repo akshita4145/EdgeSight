@@ -35,8 +35,26 @@ type StatsResponse = {
   insights: string[];
 };
 
+function formatForDateTimeLocal(date: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}`;
+}
+
+function parseLocalDateTimeToIso(value: string) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
 export default function HomePage() {
   const [timeRange, setTimeRange] = useState("24h");
+  const [customStart, setCustomStart] = useState(() =>
+    formatForDateTimeLocal(new Date(Date.now() - 24 * 60 * 60 * 1000))
+  );
+  const [customEnd, setCustomEnd] = useState(() => formatForDateTimeLocal(new Date()));
   const [refreshTick, setRefreshTick] = useState(0);
   const [loading, setLoading] = useState(true);
   const [demoLoading, setDemoLoading] = useState(false);
@@ -55,7 +73,16 @@ export default function HomePage() {
       //refetch whenever the range changes or we manually trigger a refresh.
       setLoading(true);
       try {
-        const res = await fetch(`/api/stats?range=${encodeURIComponent(timeRange)}`, {
+        const params = new URLSearchParams();
+        params.set("range", timeRange);
+        if (timeRange === "custom") {
+          const startIso = parseLocalDateTimeToIso(customStart);
+          const endIso = parseLocalDateTimeToIso(customEnd);
+          if (startIso) params.set("start", startIso);
+          if (endIso) params.set("end", endIso);
+        }
+
+        const res = await fetch(`/api/stats?${params.toString()}`, {
           cache: "no-store",
         });
 
@@ -88,7 +115,7 @@ export default function HomePage() {
     return () => {
       cancelled = true;
     };
-  }, [timeRange, refreshTick]);
+  }, [timeRange, customStart, customEnd, refreshTick]);
 
   function handleOpenRoute(target: { route: string; runtime: string }) {
     //prefer an exact route+runtime match, then fall back to route-only.
@@ -138,7 +165,14 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <DashboardHeader timeRange={timeRange} onTimeRangeChange={setTimeRange} />
+      <DashboardHeader
+        timeRange={timeRange}
+        onTimeRangeChange={setTimeRange}
+        customStart={customStart}
+        customEnd={customEnd}
+        onCustomStartChange={setCustomStart}
+        onCustomEndChange={setCustomEnd}
+      />
 
       <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-6 py-6">
         <Card className="flex flex-col gap-3 border-border/80 p-4 sm:flex-row sm:items-center sm:justify-between">
