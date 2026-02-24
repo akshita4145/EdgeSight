@@ -70,6 +70,7 @@ export default function HomePage() {
   const [customEnd, setCustomEnd] = useState(() => formatForDateTimeLocal(new Date()));
   const [refreshTick, setRefreshTick] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
   const [demoMessage, setDemoMessage] = useState<string | null>(null);
   const [totals, setTotals] = useState<Totals | null>(null);
@@ -94,7 +95,12 @@ export default function HomePage() {
 
     async function loadStats() {
       //refetch whenever the range changes or we manually trigger a refresh.
-      setLoading(true);
+      const hasExistingData = totals !== null || routes.length > 0 || insights.length > 0;
+      if (hasExistingData) {
+        setIsRefreshing(true);
+      } else {
+        setLoading(true);
+      }
       try {
         const params = new URLSearchParams();
         params.set("range", timeRange);
@@ -134,7 +140,10 @@ export default function HomePage() {
         setRoutes([]);
         setInsights(["Unable to load stats right now. Check the demo API routes and try again."]);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setIsRefreshing(false);
+        }
       }
     }
 
@@ -227,7 +236,7 @@ export default function HomePage() {
               </Select>
 
               <Button variant="outline" onClick={() => setRefreshTick((n) => n + 1)}>
-                Refresh now
+                {isRefreshing ? "Refreshing..." : "Refresh now"}
               </Button>
             </div>
           </div>
@@ -282,7 +291,8 @@ export default function HomePage() {
               </div>
 
               <div className="text-xs text-muted-foreground">
-                Auto-refresh every 5s while in FlowFund Live mode.
+                Auto-refresh every 5s while in FlowFund Live mode. FlowFund transactions are date-based,
+                so `7d` or `30d` is usually more representative than `24h`.
               </div>
 
               <Button variant="secondary" onClick={() => setRefreshTick((n) => n + 1)}>

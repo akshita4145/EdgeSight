@@ -244,11 +244,17 @@ export async function fetchFlowFundStats(input: FetchInput): Promise<FlowFundSta
     const recommendation = insight.recommendation ? ` ${insight.recommendation}` : "";
     return `${insight.title}: ${insight.message}${recommendation}`;
   });
+  const granularityHint =
+    routes.length <= 1 && (input.range === "1h" || input.range === "6h" || input.range === "24h")
+      ? [
+          "FlowFund records are currently date-based (not timestamped to the minute), so short windows like 24h may only show one transaction category. Use 7d or 30d for a fuller breakdown."
+        ]
+      : [];
 
   const generatedAt = snapshot.generatedAt ? new Date(snapshot.generatedAt) : null;
   const generatedAtText =
     generatedAt && !Number.isNaN(generatedAt.getTime())
-      ? generatedAt.toLocaleString()
+      ? `${generatedAt.toISOString()} (UTC)`
       : "unknown time";
 
   return {
@@ -259,6 +265,7 @@ export async function fetchFlowFundStats(input: FetchInput): Promise<FlowFundSta
     routes,
     insights: [
       `FlowFund live mode (${snapshot.mode}) connected. Snapshot generated at ${generatedAtText}.`,
+      ...granularityHint,
       ...financeInsights,
       ...adapterInsights,
     ].slice(0, 8),
