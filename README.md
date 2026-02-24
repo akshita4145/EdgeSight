@@ -1,130 +1,205 @@
 # EdgeSight
 
-EdgeSight is a developer-facing dashboard that helps teams understand **cost and performance tradeoffs between Edge and Serverless runtimes on Vercel**.
+EdgeSight is a demoable observability dashboard for comparing **Edge vs Serverless** behavior on Vercel.
 
-Instead of just showing raw metrics, EdgeSight connects real traffic data to **actionable insights**, helping developers decide *where* Edge makes sense, *where* Serverless is sufficient, and *when* caching changes the equation.
+It generates traffic, stores request logs in **Vercel Postgres**, aggregates runtime metrics, and surfaces **actionable insights** (latency, caching, cost concentration, and runtime migration opportunities).
 
----
+## What It Shows
 
-## What EdgeSight Does
+- total requests
+- average latency
+- cache hit rate
+- estimated cost units (relative metric for comparison)
+- per-route breakdown (requests, avg latency, p95, cache hit rate, estimated cost)
+- insight cards derived from recent traffic patterns
 
-EdgeSight answers questions like:
+## How The App Works
 
-- Which routes are slow, and *why*?
-- Are Edge functions actually improving latency?
-- Where is caching providing real benefits?
-- Which endpoints are driving the most cost?
+### 1. Demo traffic generation
 
-It’s designed to be **interactive and demoable**, so teams can see how architectural decisions affect performance in real time.
+The dashboard includes a **Generate Demo Traffic** button that:
 
----
+1. calls `POST /api/db/init` to create the `request_logs` table (if missing)
+2. sends batches of requests to:
+   - `GET /api/edge`
+   - `GET /api/serverless`
+   - `GET /api/cached` (twice to create hits/misses)
+3. refreshes dashboard stats automatically
 
-## How It Works
+### 2. Logging
 
-### 1. Traffic Simulation
-The dashboard includes a **Generate Sample Traffic** button that simulates real usage by hitting:
-- Serverless endpoints
-- Edge endpoints
-- Cached endpoints
+The demo endpoints write rows to `request_logs` in Postgres with:
 
-Each request logs runtime, latency, and cache behavior.
+- `route`
+- `runtime`
+- `latency_ms`
+- `cache_hit`
+- `created_at`
 
----
+### 3. Aggregation
 
-### 2. Data Collection
-All requests are logged into **Vercel Postgres (Neon)** with:
-- route
-- runtime (edge / serverless)
-- latency
-- cache hit/miss
-- timestamp
+`GET /api/stats` reads from Postgres and computes:
 
----
+- totals for the selected range
+- previous-period totals (for deltas)
+- per-route aggregates
+- p95 latency per route
+- estimated cost units (heuristic)
 
-### 3. Aggregation & Analysis
-A single stats API (`/api/stats`) aggregates the data to compute:
-- Total requests
-- Average latency
-- P95 latency
-- Cache hit rate
-- Estimated cost units (relative comparison)
+### 4. Insights
 
-Simple heuristics generate **human-readable insights**, such as:
-- “Consider Edge for this route”
-- “Low cache utilization detected”
-- “Latency spikes observed”
+`lib/insights.ts` generates human-readable recommendations from aggregated data, such as:
 
----
+- latency regressions
+- traffic spikes
+- cache opportunities
+- edge migration candidates
+- cost concentration
+- security reminders
 
-### 4. Dashboard UI
-The UI is built with **Next.js App Router** and components generated using **v0**, then wired to live data.
+## Project Structure
 
-Key sections:
-- **Summary Cards** — high-level metrics
-- **Routes Table** — per-route runtime, latency, and cost
-- **Insights Panel** — recommendations derived from observed behavior
+- `app/page.tsx` - dashboard page, data fetching, demo traffic button, route drawer state
+- `app/api/stats/route.ts` - Postgres-backed aggregation endpoint for dashboard metrics + insights
+- `app/api/db/init/route.ts` - creates `request_logs` table
+- `app/api/edge/route.ts` - edge runtime demo endpoint
+- `app/api/serverless/route.ts` - serverless runtime demo endpoint
+- `app/api/cached/route.ts` - serverless endpoint with in-memory cache behavior for demo hits/misses
+- `components/dashboard/*` - dashboard UI sections (header, summary cards, routes table, insights)
+- `components/ui/route-details-drawer.tsx` - route details panel
+- `lib/insights.ts` - insight generation heuristics
+- `lib/telemetry.ts` - shared range parsing and earlier in-memory telemetry helpers
 
-All UI updates automatically when new traffic is generated.
+## Local Development
 
----
+### Prerequisites
 
-## Why EdgeSight Is Different
+- node.js 18+ (prefer current lts)
+- npm
+- a Vercel Postgres database connected to this project (or equivalent env vars set)
 
-Most dashboards show metrics.
+### Install
 
-EdgeSight focuses on:
-- **Decisions**, not just data
-- **Runtime comparisons**, not isolated numbers
-- **Demo-first design**, making architectural tradeoffs easy to explain
+```bash
+npm install
+```
 
-It’s closer to an internal developer tool than a generic analytics page.
+### Run
 
----
+```bash
+npm run dev
+```
 
-## What I’d Do Next
+Open `http://localhost:3000`.
 
-If this were extended toward production, the next steps would be:
+### Initialize the database (first run)
 
-### 🔐 Authentication & Multi-Project Support
-- User auth (Vercel / GitHub OAuth)
-- Support multiple projects or environments per user
+You can either:
 
-### 💸 Real Billing Data
-- Replace estimated cost units with real Vercel usage APIs
-- Break down cost by function invocation, execution time, and data transfer
+- click **Generate Demo Traffic** in the UI (it initializes the table automatically), or
+- call the init route manually:
 
-### ⚡ Deeper Caching Analysis
-- Track cache TTL effectiveness
-- Identify routes with high recomputation cost
-- Recommend ISR, on-demand revalidation, or Edge caching strategies
+```bash
+curl -X POST http://localhost:3000/api/db/init
+```
 
-### 📈 Historical Trends
-- Compare time ranges (“vs last 7 days”)
-- Show regressions and improvements over time
+## Generate Demo Data
 
----
+The easiest way is the in-app button:
+
+- open the dashboard
+- click **Generate Demo Traffic**
+- wait a few seconds
+- the cards, routes table, and insights panel will refresh
+
+Manual traffic generation (optional):
+
+```bash
+for i in {1..10}; do curl -s http://localhost:3000/api/edge > /dev/null; done
+for i in {1..10}; do curl -s http://localhost:3000/api/serverless > /dev/null; done
+for i in {1..20}; do curl -s http://localhost:3000/api/cached > /dev/null; done
+```
+
+## API Endpoints
+
+### `POST /api/db/init`
+
+Creates the `request_logs` table if it does not exist.
+
+### `GET /api/edge`
+
+- runs in edge runtime
+- simulates faster work
+- logs request latency to Postgres
+
+### `GET /api/serverless`
+
+- runs in node/serverless runtime
+- simulates heavier work
+- logs request latency to Postgres
+
+### `GET /api/cached`
+
+- simulates a cacheable serverless endpoint
+- uses an in-memory cache with a short ttl (demo-only)
+- logs cache hit/miss behavior to Postgres
+
+### `GET /api/stats?range=24h`
+
+Returns dashboard data:
+
+- `totals`
+- `deltas`
+- `routes`
+- `insights`
+
+Supported ranges:
+
+- `1h`
+- `6h`
+- `24h`
+- `7d`
+- `30d`
+
+## Deployment (Vercel)
+
+### Required setup
+
+1. connect a Vercel Postgres database to the project
+2. ensure the generated Postgres env vars are available in the deployment environment
+3. deploy normally
+
+### Common build issues
+
+- missing `default` export in `app/page.tsx`
+  - Next.js app router pages must export a default component
+- missing dependency for `components/ui/sheet.tsx`
+  - `@radix-ui/react-dialog` must exist in `dependencies`
+
+If you add a dependency locally, commit both:
+
+- `package.json`
+- `package-lock.json`
 
 ## Tech Stack
 
-- **Next.js (App Router, TypeScript)**
-- **Vercel Edge & Serverless Functions**
-- **Vercel Postgres (Neon)**
-- **v0-generated UI (customized)**
-- **Tailwind CSS**
+- next.js 16 (app router, typescript)
+- react 19
+- tailwind css
+- lucide-react
+- radix ui primitives
+- @vercel/postgres
 
----
+## Notes / Limitations
 
-## Demo Tip
+- estimated cost units are heuristic and meant for comparisons, not billing
+- `/api/cached` cache is in-memory and instance-local (demo behavior only)
+- insight generation is rule-based heuristics, not a production ml/recommendation system
 
-Click **Generate Sample Traffic**, then watch how:
-- latency changes by runtime
-- cached routes improve on repeat requests
-- insights update automatically
+## Future Improvements
 
----
-
-## Summary
-
-EdgeSight demonstrates how runtime choices affect real-world performance and cost — and how tooling can guide better architectural decisions.
-
-Built as an exploration of developer experience, observability, and platform design.
+- authentication and multi-project support
+- real vercel usage/billing integrations
+- richer cache analytics (ttl effectiveness, revalidation recommendations)
+- historical trend charts
+- filtering by route groups / environment
