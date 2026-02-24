@@ -5,6 +5,8 @@ import { DashboardHeader } from "@/components/dashboard/header";
 import { SummaryCards } from "@/components/dashboard/summary-cards";
 import { RoutesTable } from "@/components/dashboard/routes-table";
 import { InsightsPanel } from "@/components/dashboard/insights-panel";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   RouteDetailsDrawer,
   type RouteStat,
@@ -35,7 +37,10 @@ type StatsResponse = {
 
 export default function HomePage() {
   const [timeRange, setTimeRange] = useState("24h");
+  const [refreshTick, setRefreshTick] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [demoLoading, setDemoLoading] = useState(false);
+  const [demoMessage, setDemoMessage] = useState<string | null>(null);
   const [totals, setTotals] = useState<Totals | null>(null);
   const [deltas, setDeltas] = useState<Deltas | null>(null);
   const [routes, setRoutes] = useState<RouteStat[]>([]);
@@ -80,7 +85,7 @@ export default function HomePage() {
     return () => {
       cancelled = true;
     };
-  }, [timeRange]);
+  }, [timeRange, refreshTick]);
 
   function handleOpenRoute(target: { route: string; runtime: string }) {
     const match =
@@ -92,11 +97,61 @@ export default function HomePage() {
     setDrawerOpen(true);
   }
 
+  async function hitEndpoint(path: string, count: number) {
+    const requests = Array.from({ length: count }, () =>
+      fetch(path, { method: "GET", cache: "no-store" })
+    );
+    await Promise.all(requests);
+  }
+
+  async function handleGenerateDemoTraffic() {
+    setDemoLoading(true);
+    setDemoMessage("Generating demo traffic...");
+
+    try {
+      const initRes = await fetch("/api/db/init", { method: "POST" });
+      if (!initRes.ok) {
+        throw new Error(`DB init failed (${initRes.status})`);
+      }
+
+      await hitEndpoint("/api/edge", 12);
+      await hitEndpoint("/api/serverless", 12);
+      await hitEndpoint("/api/cached", 12);
+      await hitEndpoint("/api/cached", 12);
+
+      setDemoMessage("Demo traffic generated. Refreshing dashboard...");
+      setRefreshTick((n) => n + 1);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setDemoMessage(`Failed to generate demo traffic: ${message}`);
+    } finally {
+      setDemoLoading(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <DashboardHeader timeRange={timeRange} onTimeRangeChange={setTimeRange} />
 
       <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-6 py-6">
+        <Card className="flex flex-col gap-3 border-border/80 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-sm font-semibold">Demo Data Generator</div>
+            <div className="text-xs text-muted-foreground">
+              Initializes the DB table and sends sample requests to demo endpoints.
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {demoMessage ? (
+              <div className="max-w-[320px] text-xs text-muted-foreground">{demoMessage}</div>
+            ) : null}
+            <Button onClick={handleGenerateDemoTraffic} disabled={demoLoading}>
+              {demoLoading ? "Generating..." : "Generate Demo Traffic"}
+            </Button>
+          </div>
+        </Card>
+
         <SummaryCards totals={totals} deltas={deltas} loading={loading} />
 
         <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
