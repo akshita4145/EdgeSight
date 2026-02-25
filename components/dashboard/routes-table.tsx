@@ -49,7 +49,7 @@ export function RoutesTable({
                   <TableHead className="text-right">Requests</TableHead>
                   <TableHead className="text-right">Avg</TableHead>
                   <TableHead className="text-right">P95</TableHead>
-                  <TableHead className="text-right">Cost</TableHead>
+                  <TableHead className="text-right">Compute</TableHead>
                 </TableRow>
               </TableHeader>
 

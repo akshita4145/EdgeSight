@@ -82,10 +82,10 @@ export function SummaryCards({
     },
     {
       key: "cost",
-      label: "Estimated Cost",
+      label: "Estimated Compute Load",
       value: loading ? "—" : `${estCost.toFixed(2)} units`,
       icon: DollarSign,
-      description: "relative estimate",
+      description: "proxy for computing power",
       pill: () => {
         if (loading || !deltas) return { text: "—", tone: "neutral" as const };
         //higher cost is worse.

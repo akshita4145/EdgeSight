@@ -147,7 +147,7 @@ export function RouteDetailsDrawer({
                 </Card>
 
                 <Card className="p-3 col-span-2">
-                  <div className="text-xs text-muted-foreground">Estimated cost units</div>
+                  <div className="text-xs text-muted-foreground">Estimated compute units</div>
                   <div className="mt-1 text-lg font-semibold">{route.est_cost_units.toFixed(2)}</div>
                 </Card>
               </div>

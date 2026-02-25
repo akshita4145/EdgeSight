@@ -63,6 +63,7 @@ export default function HomePage() {
   const [dataSource, setDataSource] = useState<DataSource>("edgesight");
   const [flowfundBaseUrl, setFlowfundBaseUrl] = useState("http://localhost:3001");
   const [flowfundMode, setFlowfundMode] = useState<"healthy" | "at-risk">("healthy");
+  const [flowfundSidebarCollapsed, setFlowfundSidebarCollapsed] = useState(false);
   const [timeRange, setTimeRange] = useState("24h");
   const [customStart, setCustomStart] = useState(() =>
     formatForDateTimeLocal(new Date(Date.now() - 24 * 60 * 60 * 1000))
@@ -200,6 +201,8 @@ export default function HomePage() {
     }
   }
 
+  const showInsightsSidebar = !(dataSource === "flowfund" && flowfundSidebarCollapsed);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <DashboardHeader
@@ -260,7 +263,49 @@ export default function HomePage() {
               </div>
             </div>
           ) : (
-            <div className="grid gap-3 md:grid-cols-[1.2fr_180px_160px_auto] md:items-end">
+            <div className="space-y-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="text-xs text-muted-foreground">
+                  Auto-refresh every 5s while in FlowFund Live mode. FlowFund transactions are
+                  date-based, so `7d` or `30d` is usually more representative than `24h`.
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <div className="min-w-[180px]">
+                    <div className="mb-1 text-xs text-muted-foreground">FlowFund Mode</div>
+                    <Select
+                      value={flowfundMode}
+                      onValueChange={(value) => setFlowfundMode(value as "healthy" | "at-risk")}
+                    >
+                      <SelectTrigger className="w-full border-border bg-secondary">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="healthy">healthy</SelectItem>
+                        <SelectItem value="at-risk">at-risk</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => setFlowfundSidebarCollapsed((v) => !v)}
+                    className="self-end"
+                  >
+                    {flowfundSidebarCollapsed ? "Show Sidebar" : "Hide Sidebar"}
+                  </Button>
+
+                  <Button
+                    variant="secondary"
+                    onClick={() => setRefreshTick((n) => n + 1)}
+                    className="self-end"
+                  >
+                    Reconnect
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-[1.2fr] md:items-end">
               <div>
                 <label className="mb-1 block text-xs text-muted-foreground" htmlFor="flowfund-url">
                   FlowFund Base URL
@@ -273,45 +318,27 @@ export default function HomePage() {
                   className="border-border bg-secondary"
                 />
               </div>
-
-              <div>
-                <div className="mb-1 text-xs text-muted-foreground">FlowFund Mode</div>
-                <Select
-                  value={flowfundMode}
-                  onValueChange={(value) => setFlowfundMode(value as "healthy" | "at-risk")}
-                >
-                  <SelectTrigger className="w-full border-border bg-secondary">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="healthy">healthy</SelectItem>
-                    <SelectItem value="at-risk">at-risk</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
-
-              <div className="text-xs text-muted-foreground">
-                Auto-refresh every 5s while in FlowFund Live mode. FlowFund transactions are date-based,
-                so `7d` or `30d` is usually more representative than `24h`.
-              </div>
-
-              <Button variant="secondary" onClick={() => setRefreshTick((n) => n + 1)}>
-                Reconnect
-              </Button>
             </div>
           )}
         </Card>
 
         <SummaryCards totals={totals} deltas={deltas} loading={loading} />
 
-        <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <div
+          className={`grid gap-6 ${
+            showInsightsSidebar ? "xl:grid-cols-[1.2fr_0.8fr]" : "xl:grid-cols-1"
+          }`}
+        >
           <RoutesTable routes={routes} loading={loading} onOpenRoute={handleOpenRoute} />
-          <InsightsPanel
-            insights={insights}
-            routes={routes}
-            loading={loading}
-            onOpenRoute={handleOpenRoute}
-          />
+          {showInsightsSidebar ? (
+            <InsightsPanel
+              insights={insights}
+              routes={routes}
+              loading={loading}
+              onOpenRoute={handleOpenRoute}
+            />
+          ) : null}
         </div>
       </main>
 
