@@ -2,6 +2,11 @@
 
 EdgeSight is a demoable observability dashboard for comparing **Edge vs Serverless** behavior on Vercel.
 
+It now supports two data sources:
+
+- `EdgeSight Demo` (its own API traffic telemetry in Vercel Postgres)
+- `FlowFund Live` (live transaction-backed metrics pulled from `flowfund-cashflow`)
+
 It generates traffic, stores request logs in **Vercel Postgres**, aggregates runtime metrics, and surfaces **actionable insights** (latency, caching, cost concentration, and runtime migration opportunities).
 
 ## What It Shows
@@ -12,6 +17,7 @@ It generates traffic, stores request logs in **Vercel Postgres**, aggregates run
 - estimated cost units (relative metric for comparison)
 - per-route breakdown (requests, avg latency, p95, cache hit rate, estimated cost)
 - insight cards derived from recent traffic patterns
+- a switchable live source mode for FlowFund transaction telemetry (mapped into the same dashboard model)
 
 ## How The App Works
 
@@ -46,6 +52,15 @@ The demo endpoints write rows to `request_logs` in Postgres with:
 - p95 latency per route
 - estimated cost units (heuristic)
 
+### 3b. FlowFund live adapter mode
+
+When the dashboard is switched to **FlowFund Live**, `GET /api/stats` can proxy to a FlowFund deployment and adapt finance transactions into the same EdgeSight response shape (`totals`, `deltas`, `routes`, `insights`).
+
+- source selector: `source=edgesight | flowfund`
+- FlowFund mode selector: `flowfundMode=healthy | at-risk`
+- FlowFund base URL can be passed from the UI or via `FLOWFUND_BASE_URL`
+- Vercel deployment protection can be bypassed server-to-server with `FLOWFUND_VERCEL_BYPASS_TOKEN`
+
 ### 4. Insights
 
 `lib/insights.ts` generates human-readable recommendations from aggregated data, such as:
@@ -59,8 +74,8 @@ The demo endpoints write rows to `request_logs` in Postgres with:
 
 ## Project Structure
 
-- `app/page.tsx` - dashboard page, data fetching, demo traffic button, route drawer state
-- `app/api/stats/route.ts` - Postgres-backed aggregation endpoint for dashboard metrics + insights
+- `app/page.tsx` - dashboard page, data-source switch, FlowFund connection controls, polling, demo traffic button
+- `app/api/stats/route.ts` - Postgres-backed stats plus FlowFund proxy/adapter entrypoint
 - `app/api/db/init/route.ts` - creates `request_logs` table
 - `app/api/edge/route.ts` - edge runtime demo endpoint
 - `app/api/serverless/route.ts` - serverless runtime demo endpoint
@@ -69,6 +84,7 @@ The demo endpoints write rows to `request_logs` in Postgres with:
 - `components/ui/route-details-drawer.tsx` - route details panel
 - `lib/insights.ts` - insight generation heuristics
 - `lib/telemetry.ts` - shared range parsing and earlier in-memory telemetry helpers
+- `lib/flowfund-adapter.ts` - maps FlowFund transactions/dashboard into EdgeSight stats format
 
 ## Local Development
 
@@ -91,6 +107,14 @@ npm run dev
 ```
 
 Open `http://localhost:3000`.
+
+### Optional: Run FlowFund integration locally
+
+If you want to demo the FlowFund-connected mode locally:
+
+1. run `flowfund-cashflow` separately (for example on `http://localhost:3001`)
+2. open EdgeSight and switch **Data Source** to **FlowFund Live**
+3. set the FlowFund Base URL in the UI (or set `FLOWFUND_BASE_URL`)
 
 ### Initialize the database (first run)
 
@@ -161,13 +185,35 @@ Supported ranges:
 - `7d`
 - `30d`
 
+Additional optional query params for FlowFund mode:
+
+- `source=flowfund`
+- `flowfundMode=healthy` or `flowfundMode=at-risk`
+- `flowfundBaseUrl=https://...`
+
 ## Deployment (Vercel)
 
 ### Required setup
 
 1. connect a Vercel Postgres database to the project
 2. ensure the generated Postgres env vars are available in the deployment environment
-3. deploy normally
+3. (optional) set `FLOWFUND_BASE_URL` to your deployed FlowFund app URL
+4. (optional) if FlowFund uses Vercel deployment protection, set `FLOWFUND_VERCEL_BYPASS_TOKEN`
+5. deploy normally
+
+### Running EdgeSight + FlowFund together on Vercel
+
+Recommended setup:
+
+1. deploy `flowfund-cashflow` as its own Vercel project
+2. deploy `EdgeSight` as a separate Vercel project
+3. point EdgeSight to the FlowFund deployment URL via the UI or `FLOWFUND_BASE_URL`
+
+If you use a protected FlowFund preview deployment:
+
+- generate the bypass token in the **FlowFund** Vercel project
+- add it to the **EdgeSight** Vercel project as `FLOWFUND_VERCEL_BYPASS_TOKEN`
+- redeploy EdgeSight after adding the env var
 
 ### Common build issues
 
@@ -195,6 +241,8 @@ If you add a dependency locally, commit both:
 - estimated cost units are heuristic and meant for comparisons, not billing
 - `/api/cached` cache is in-memory and instance-local (demo behavior only)
 - insight generation is rule-based heuristics, not a production ml/recommendation system
+- FlowFund live mode adapts finance transactions into EdgeSight-style metrics (latency/cache/cost are synthetic demo metrics)
+- FlowFund short windows (`1h`, `6h`, `24h`) can look sparse because FlowFund demo transactions are date-based
 
 ## Future Improvements
 
