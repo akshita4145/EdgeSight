@@ -1,4 +1,4 @@
-import { Activity, Clock, DollarSign, Zap } from "lucide-react";
+import { Activity, Clock, Gauge, Zap } from "lucide-react";
 import { Card } from "@/components/ui/card";
 
 type Totals = {
@@ -82,15 +82,15 @@ export function SummaryCards({
     },
     {
       key: "cost",
-      label: "Estimated Compute Load",
-      value: loading ? "—" : `${estCost.toFixed(2)} units`,
-      icon: DollarSign,
-      description: "proxy for computing power",
+      label: "Compute Usage",
+      value: loading ? "—" : `${estCost.toFixed(1)} GB-ms`,
+      icon: Gauge,
+      description: "estimated as memory x duration",
       pill: () => {
         if (loading || !deltas) return { text: "—", tone: "neutral" as const };
         //higher cost is worse.
         const tone = costDelta === 0 ? "neutral" : costDelta < 0 ? "good" : "bad";
-        return { text: formatSigned(costDelta, { decimals: 2 }), tone } as const;
+        return { text: formatSigned(costDelta, { decimals: 1, suffix: " GB-ms" }), tone } as const;
       },
     },
     {

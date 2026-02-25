@@ -102,14 +102,14 @@ export function generateInsights(
     );
   }
 
-  // 5) Cost risk: route contributing a lot of cost units
+  // 5) Compute-load risk: route contributing a lot of estimated GB-ms in the window
   const totalCost = Math.max(1, totals.est_cost_units);
   const costTop = [...routes].sort((a, b) => b.est_cost_units - a.est_cost_units)[0];
   if (costTop && totals.est_cost_units >= 25 && costTop.requests >= 10 && costTop.est_cost_units / totalCost >= 0.35) {
     out.push(
-      `Cost concentration: ${costTop.route} accounts for ${Math.round(
+      `Compute concentration: ${costTop.route} accounts for ${Math.round(
         (costTop.est_cost_units / totalCost) * 100
-      )}% of the estimated cost score in this window. Investigate payload size, cold starts, or redundant calls.`
+      )}% of the estimated compute usage (GB-ms) in this window. Investigate payload size, cold starts, or redundant calls.`
     );
   }
 

@@ -73,7 +73,7 @@ type TxWithSignals = FinanceTransaction & {
   ts: number;
   syntheticLatencyMs: number;
   syntheticCacheHit: boolean;
-  syntheticCostUnits: number;
+  syntheticComputeGbMs: number;
   syntheticRuntime: Runtime;
   routeKey: string;
 };
@@ -106,11 +106,14 @@ function synthesizeLatency(tx: FinanceTransaction) {
   return Math.round(typeBase + amountWeight + statusPenalty + categoryWeight);
 }
 
-function synthesizeCostUnits(tx: FinanceTransaction) {
-  const base = tx.type === "outflow" ? 1.5 : 0.9;
-  const amountCost = Math.abs(tx.amount) / 5000;
-  const statusPenalty = tx.status === "failed" ? 1.2 : tx.status === "pending" ? 0.4 : 0;
-  return base + amountCost + statusPenalty;
+function syntheticRuntimeMemoryGb(runtime: Runtime) {
+  return runtime === "edge" ? 0.128 : 0.512;
+}
+
+function synthesizeComputeGbMs(tx: FinanceTransaction) {
+  const runtime: Runtime = tx.type === "inflow" ? "edge" : "serverless";
+  const latencyMs = synthesizeLatency(tx);
+  return syntheticRuntimeMemoryGb(runtime) * Math.max(0, latencyMs);
 }
 
 function summarize(rows: TxWithSignals[]) {
@@ -121,7 +124,8 @@ function summarize(rows: TxWithSignals[]) {
   const cache_hit_rate = total_requests
     ? rows.reduce((sum, row) => sum + (row.syntheticCacheHit ? 1 : 0), 0) / total_requests
     : 0;
-  const est_cost_units = rows.reduce((sum, row) => sum + row.syntheticCostUnits, 0);
+  // Legacy response key name; values now represent estimated compute usage in GB-ms.
+  const est_cost_units = rows.reduce((sum, row) => sum + row.syntheticComputeGbMs, 0);
 
   return { total_requests, avg_latency_ms, cache_hit_rate, est_cost_units };
 }
@@ -158,7 +162,7 @@ function aggregateRoutes(
       avg_latency_ms,
       p95_latency_ms: p95(latencies),
       cache_hit_rate,
-      est_cost_units: group.reduce((sum, row) => sum + row.syntheticCostUnits, 0),
+      est_cost_units: group.reduce((sum, row) => sum + row.syntheticComputeGbMs, 0),
     };
   });
 
@@ -190,7 +194,7 @@ function withSignals(transactions: FinanceTransaction[]): TxWithSignals[] {
         ts,
         syntheticLatencyMs: synthesizeLatency(tx),
         syntheticCacheHit,
-        syntheticCostUnits: synthesizeCostUnits(tx),
+        syntheticComputeGbMs: synthesizeComputeGbMs(tx),
         syntheticRuntime: tx.type === "inflow" ? "edge" : "serverless",
         routeKey: buildRouteKey(tx),
       };

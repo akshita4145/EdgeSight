@@ -49,7 +49,7 @@ export function RoutesTable({
                   <TableHead className="text-right">Requests</TableHead>
                   <TableHead className="text-right">Avg</TableHead>
                   <TableHead className="text-right">P95</TableHead>
-                  <TableHead className="text-right">Compute</TableHead>
+                  <TableHead className="text-right">GB-ms</TableHead>
                 </TableRow>
               </TableHeader>
 
@@ -69,7 +69,7 @@ export function RoutesTable({
                     <TableCell className="text-right">{formatCompact(r.requests)}</TableCell>
                     <TableCell className="text-right">{Math.round(r.avg_latency_ms)}ms</TableCell>
                     <TableCell className="text-right">{Math.round(r.p95_latency_ms)}ms</TableCell>
-                    <TableCell className="text-right">{r.est_cost_units.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">{r.est_cost_units.toFixed(1)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

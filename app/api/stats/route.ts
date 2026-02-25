@@ -39,10 +39,13 @@ function p95(values: number[]) {
   return sorted[idx];
 }
 
-function estimateCostUnits(runtime: string, latencyMs: number) {
-  //keep cost directional for comparisons, not billing-accurate.
-  const runtimeBase = runtime === "edge" ? 0.8 : 1.2;
-  return runtimeBase + latencyMs / 200;
+function runtimeMemoryGb(runtime: string) {
+  // Assumed memory sizes for demo workloads so usage can be expressed in GB-ms.
+  return runtime === "edge" ? 0.128 : 0.512;
+}
+
+function estimateComputeGbMs(runtime: string, latencyMs: number) {
+  return runtimeMemoryGb(runtime) * Math.max(0, latencyMs);
 }
 
 function summarizeLogs(rows: DbLogRow[]): Totals {
@@ -54,8 +57,9 @@ function summarizeLogs(rows: DbLogRow[]): Totals {
   const cache_hit_rate = total_requests
     ? rows.reduce((sum, r) => sum + (r.cache_hit ? 1 : 0), 0) / total_requests
     : 0;
+  // Legacy response key name; values now represent estimated compute usage in GB-ms.
   const est_cost_units = rows.reduce(
-    (sum, r) => sum + estimateCostUnits(String(r.runtime), Number(r.latency_ms)),
+    (sum, r) => sum + estimateComputeGbMs(String(r.runtime), Number(r.latency_ms)),
     0
   );
 
@@ -85,7 +89,7 @@ function aggregateRoutes(rows: DbLogRow[]): RouteAgg[] {
     const cache_hits = group.reduce((sum, r) => sum + (r.cache_hit ? 1 : 0), 0);
     const cache_hit_rate = requests ? cache_hits / requests : 0;
     const est_cost_units = group.reduce(
-      (sum, r) => sum + estimateCostUnits(String(r.runtime), Number(r.latency_ms)),
+      (sum, r) => sum + estimateComputeGbMs(String(r.runtime), Number(r.latency_ms)),
       0
     );
 

@@ -7,15 +7,15 @@ It now supports two data sources:
 - `EdgeSight Demo` (its own API traffic telemetry in Vercel Postgres)
 - `FlowFund Live` (live transaction-backed metrics pulled from `flowfund-cashflow`)
 
-It generates traffic, stores request logs in **Vercel Postgres**, aggregates runtime metrics, and surfaces **actionable insights** (latency, caching, compute-load concentration, and runtime migration opportunities).
+It generates traffic, stores request logs in **Vercel Postgres**, aggregates runtime metrics, and surfaces **actionable insights** (latency, caching, compute concentration, and runtime migration opportunities).
 
 ## What It Shows
 
 - total requests
 - average latency
 - cache hit rate
-- estimated compute units (relative metric / compute-power proxy for comparison)
-- per-route breakdown (requests, avg latency, p95, cache hit rate, estimated compute load)
+- estimated compute usage in `GB-ms` (assumed memory x request duration)
+- per-route breakdown (requests, avg latency, p95, cache hit rate, estimated compute usage in `GB-ms`)
 - insight cards derived from recent traffic patterns
 - a switchable live source mode for FlowFund transaction telemetry (mapped into the same dashboard model)
 
@@ -50,7 +50,7 @@ The demo endpoints write rows to `request_logs` in Postgres with:
 - previous-period totals (for deltas)
 - per-route aggregates
 - p95 latency per route
-- estimated compute units (heuristic compute-power proxy)
+- estimated compute usage in `GB-ms` (derived from assumed memory x latency)
 
 ### 3b. FlowFund live adapter mode
 
@@ -69,7 +69,7 @@ When the dashboard is switched to **FlowFund Live**, `GET /api/stats` can proxy 
 - traffic spikes
 - cache opportunities
 - edge migration candidates
-- compute-load concentration
+- compute concentration
 - security reminders
 
 ## Project Structure
@@ -238,7 +238,7 @@ If you add a dependency locally, commit both:
 
 ## Notes / Limitations
 
-- estimated compute units are heuristic and meant for comparisons, not billing
+- compute usage is shown in `GB-ms` (estimated using assumed memory by runtime and observed latency), so it is still not billing-accurate
 - `/api/cached` cache is in-memory and instance-local (demo behavior only)
 - insight generation is rule-based heuristics, not a production ml/recommendation system
 - FlowFund live mode adapts finance transactions into EdgeSight-style metrics (latency/cache/cost are synthetic demo metrics)
