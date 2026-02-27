@@ -7,7 +7,6 @@ import { RoutesTable } from "@/components/dashboard/routes-table";
 import { InsightsPanel } from "@/components/dashboard/insights-panel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -44,6 +43,7 @@ type StatsResponse = {
 };
 
 type DataSource = "edgesight" | "flowfund";
+const FLOWFUND_BASE_URL = "https://v0-flowfund-cashflow.vercel.app";
 
 function formatForDateTimeLocal(date: Date) {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -61,7 +61,6 @@ function parseLocalDateTimeToIso(value: string) {
 
 export default function HomePage() {
   const [dataSource, setDataSource] = useState<DataSource>("edgesight");
-  const [flowfundBaseUrl, setFlowfundBaseUrl] = useState("http://localhost:3001");
   const [flowfundMode, setFlowfundMode] = useState<"healthy" | "at-risk">("healthy");
   const [flowfundSidebarCollapsed, setFlowfundSidebarCollapsed] = useState(false);
   const [timeRange, setTimeRange] = useState("24h");
@@ -108,7 +107,7 @@ export default function HomePage() {
         params.set("source", dataSource);
         if (dataSource === "flowfund") {
           params.set("flowfundMode", flowfundMode);
-          params.set("flowfundBaseUrl", flowfundBaseUrl);
+          params.set("flowfundBaseUrl", FLOWFUND_BASE_URL);
         }
         if (timeRange === "custom") {
           const startIso = parseLocalDateTimeToIso(customStart);
@@ -153,7 +152,7 @@ export default function HomePage() {
     return () => {
       cancelled = true;
     };
-  }, [timeRange, customStart, customEnd, refreshTick, dataSource, flowfundMode, flowfundBaseUrl]);
+  }, [timeRange, customStart, customEnd, refreshTick, dataSource, flowfundMode]);
 
   function handleOpenRoute(target: { route: string; runtime: string }) {
     //prefer an exact route+runtime match, then fall back to route-only.
@@ -304,20 +303,8 @@ export default function HomePage() {
                   </Button>
                 </div>
               </div>
-
-              <div className="grid gap-3 md:grid-cols-[1.2fr] md:items-end">
-              <div>
-                <label className="mb-1 block text-xs text-muted-foreground" htmlFor="flowfund-url">
-                  FlowFund Base URL
-                </label>
-                <Input
-                  id="flowfund-url"
-                  value={flowfundBaseUrl}
-                  onChange={(e) => setFlowfundBaseUrl(e.target.value)}
-                  placeholder="http://localhost:3001"
-                  className="border-border bg-secondary"
-                />
-              </div>
+              <div className="text-xs text-muted-foreground">
+                Connected FlowFund URL: {FLOWFUND_BASE_URL}
               </div>
             </div>
           )}
